@@ -127,18 +127,26 @@ queryviz/
 ## Building for Production
 
 ```bash
+# Build frontend and backend
 npm run build
-```
 
-This will:
-1. Build the React frontend (output: `frontend/dist`)
-2. Build the TypeScript backend (output: `backend/dist`)
-
-To start the production server:
-
-```bash
+# Test production build locally
 npm start
 ```
+
+Visit http://localhost:5000 to test the production build.
+
+## 🚀 Deploy to Render
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions.
+
+**Quick Steps:**
+1. Push your code to GitHub
+2. Connect repository to Render
+3. Set environment variable: `OPENAI_API_KEY`
+4. Deploy! 🎉
+
+The server will automatically serve the frontend build and API endpoints.
 
 ## License
 
