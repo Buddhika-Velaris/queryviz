@@ -3,7 +3,9 @@ import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
-import analyzeRouter from './routes/analyze';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import analyzeRouter from './routes/analyze.js';
 
 dotenv.config();
 
@@ -51,6 +53,19 @@ app.get('/health', (req, res) => {
 
 // API routes
 app.use('/api/analyze', analyzeRouter);
+
+// Serve static files from frontend build in production
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const frontendBuildPath = path.join(__dirname, '../../frontend/dist');
+
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(frontendBuildPath));
+  
+  // Catch-all route to serve index.html for client-side routing
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(frontendBuildPath, 'index.html'));
+  });
+}
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
