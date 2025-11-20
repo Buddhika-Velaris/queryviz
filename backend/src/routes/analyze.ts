@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
-import { analyzeSinglePlan, comparePlans, explainNode } from '../services/llmService';
-import { extractPlanMetrics } from '../utils/planParser';
+import { analyzeSinglePlan, comparePlans, explainNode } from '../services/llmService.js';
+import { extractPlanMetrics } from '../utils/planParser.js';
 
 const router = Router();
 

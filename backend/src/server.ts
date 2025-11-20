@@ -5,7 +5,7 @@ import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import analyzeRouter from './routes/analyze';
+import analyzeRouter from './routes/analyze.js';
 
 dotenv.config();
 
