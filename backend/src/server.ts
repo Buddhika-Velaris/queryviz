@@ -10,13 +10,26 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Request logging middleware
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    console.log(`${req.method} ${req.path} - ${res.statusCode} (${duration}ms)`);
+  });
+  next();
+});
+
 // Security middleware
 app.use(helmet());
 
-// Rate limiting
+// Rate limiting - more restrictive for AI endpoints
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  max: 50, // Reduced from 100 to prevent API abuse
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 app.use('/api/', limiter);
 
@@ -47,7 +60,29 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📊 QueryViz Backend - Ready to analyze query plans`);
+const server = app.listen(PORT, () => {
+  console.log('='.repeat(60));
+  console.log(`🚀 QueryViz Backend Server`);
+  console.log(`📊 Port: ${PORT}`);
+  console.log(`🔑 OpenAI: ${process.env.OPENAI_API_KEY ? '✓ Configured' : '✗ Missing'}`);
+  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+  console.log('='.repeat(60));
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('\n⚠️  SIGTERM received. Shutting down gracefully...');
+  server.close(() => {
+    console.log('✅ Server closed. Process terminating.');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('\n⚠️  SIGINT received. Shutting down gracefully...');
+  server.close(() => {
+    console.log('✅ Server closed. Process terminating.');
+    process.exit(0);
+  });
 });
