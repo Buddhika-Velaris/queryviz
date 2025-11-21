@@ -17,11 +17,6 @@ interface PerformanceScorecard {
     maxScore: number;
     details: string;
   };
-  accuracyScore: {
-    score: number;
-    maxScore: number;
-    details: string;
-  };
   verdict: string;
   recommendations: string[];
 }
@@ -116,13 +111,6 @@ export default function PerformanceScorecardComponent({ scorecard, label }: Perf
           label="📈 Scalability (Growth Potential)"
           color={getScoreColor(scorecard.scalabilityScore.score, scorecard.scalabilityScore.maxScore)}
         />
-        
-        <ScoreBar
-          score={scorecard.accuracyScore.score}
-          maxScore={scorecard.accuracyScore.maxScore}
-          label="🎯 Planner Accuracy (Statistics)"
-          color={getScoreColor(scorecard.accuracyScore.score, scorecard.accuracyScore.maxScore)}
-        />
       </div>
 
       {/* Details */}
@@ -140,10 +128,6 @@ export default function PerformanceScorecardComponent({ scorecard, label }: Perf
           <div className="flex items-start gap-2">
             <span className="text-gray-500 font-medium min-w-[100px]">📈 Scalability:</span>
             <span className="text-gray-700">{scorecard.scalabilityScore.details}</span>
-          </div>
-          <div className="flex items-start gap-2">
-            <span className="text-gray-500 font-medium min-w-[100px]">🎯 Accuracy:</span>
-            <span className="text-gray-700">{scorecard.accuracyScore.details}</span>
           </div>
         </div>
       </div>

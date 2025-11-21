@@ -21,10 +21,9 @@ export async function analyzeSinglePlan(planJson: any, scorecard?: any): Promise
 
 **PERFORMANCE SCORECARD (0-100):**
 - Total Score: ${scorecard.totalScore}/100
-- Latency: ${scorecard.latencyScore.score}/30 - ${scorecard.latencyScore.details}
-- I/O Efficiency: ${scorecard.ioEfficiencyScore.score}/30 - ${scorecard.ioEfficiencyScore.details}
-- Scalability: ${scorecard.scalabilityScore.score}/25 - ${scorecard.scalabilityScore.details}
-- Accuracy: ${scorecard.accuracyScore.score}/15 - ${scorecard.accuracyScore.details}
+- Latency: ${scorecard.latencyScore.score}/35 - ${scorecard.latencyScore.details}
+- I/O Efficiency: ${scorecard.ioEfficiencyScore.score}/35 - ${scorecard.ioEfficiencyScore.details}
+- Scalability: ${scorecard.scalabilityScore.score}/30 - ${scorecard.scalabilityScore.details}
 - Verdict: ${scorecard.verdict}
 ` : '';
 
@@ -32,29 +31,24 @@ export async function analyzeSinglePlan(planJson: any, scorecard?: any): Promise
 
 ## Performance Scorecard Framework (0-100):
 
-### 1. Latency Score (Max 30 Points) - Query Speed
-- < 50ms: 30 pts (Excellent)
-- 50-500ms: 20 pts (Acceptable)
-- 500ms-2s: 10 pts (Needs Review)
+### 1. Latency Score (Max 35 Points) - Query Speed
+- < 50ms: 35 pts (Excellent)
+- 50-500ms: 25 pts (Acceptable)
+- 500ms-2s: 12 pts (Needs Review)
 - > 2s: 0 pts (Critical)
 - Planning Time > Execution Time: -5 pts penalty
 
-### 2. I/O Efficiency Score (Max 30 Points) - RAM vs Disk
+### 2. I/O Efficiency Score (Max 35 Points) - RAM vs Disk
 Cache Hit Ratio = Shared Hit Blocks / (Shared Hit + Shared Read)
-- > 99% (RAM): 30 pts
-- 90-99%: 20 pts
+- > 99% (RAM): 35 pts
+- 90-99%: 25 pts
 - < 90% (Disk Heavy): 0 pts
 
-### 3. Scalability Score (Max 25 Points) - Growth Potential
-- Index Scan + Low filtering: 25 pts
-- Seq Scan on tiny table (< 1000 rows): 20 pts
+### 3. Scalability Score (Max 30 Points) - Growth Potential
+- Index Scan + Low filtering: 30 pts
+- Seq Scan on tiny table (< 1000 rows): 24 pts
 - Seq Scan on large table: 0 pts
-- High row filtering (> 50% removed): -10 pts
-
-### 4. Planner Accuracy Score (Max 15 Points) - Statistics Quality
-- Estimate within 10x of actual: 15 pts
-- Estimate off by 10-100x: 5 pts
-- Estimate off by > 100x: 0 pts
+- High row filtering (> 50% removed): -12 pts
 
 Provide your analysis in this exact format:
 
@@ -65,10 +59,9 @@ Provide your analysis in this exact format:
 **Verdict:** [Verdict from scorecard]
 
 ### Score Breakdown:
-- ⚡ **Latency:** [X]/30 - [Brief explanation]
-- 💾 **I/O Efficiency:** [X]/30 - [Brief explanation]
-- 📈 **Scalability:** [X]/25 - [Brief explanation]
-- 🎯 **Accuracy:** [X]/15 - [Brief explanation]
+- ⚡ **Latency:** [X]/35 - [Brief explanation]
+- 💾 **I/O Efficiency:** [X]/35 - [Brief explanation]
+- 📈 **Scalability:** [X]/30 - [Brief explanation]
 
 ## 🔍 Detailed Analysis
 
@@ -135,10 +128,9 @@ Provide your comparison in this format:
 
 | Metric | Plan A | Plan B | Winner |
 |--------|---------|---------|--------|
-| Latency | [X]/30 | [Y]/30 | [A/B] |
-| I/O Efficiency | [X]/30 | [Y]/30 | [A/B] |
-| Scalability | [X]/25 | [Y]/25 | [A/B] |
-| Accuracy | [X]/15 | [Y]/15 | [A/B] |
+| Latency | [X]/35 | [Y]/35 | [A/B] |
+| I/O Efficiency | [X]/35 | [Y]/35 | [A/B] |
+| Scalability | [X]/30 | [Y]/30 | [A/B] |
 
 ## 🔍 Key Differences
 
@@ -160,10 +152,9 @@ Provide your comparison in this format:
 
 **Plan A Scorecard:**
 - Total Score: ${scorecardA?.totalScore || 'N/A'}/100
-- Latency: ${scorecardA?.latencyScore.score || 'N/A'}/30
-- I/O: ${scorecardA?.ioEfficiencyScore.score || 'N/A'}/30 (Cache: ${scorecardA?.ioEfficiencyScore.cacheHitRatio?.toFixed(1) || 'N/A'}%)
-- Scalability: ${scorecardA?.scalabilityScore.score || 'N/A'}/25
-- Accuracy: ${scorecardA?.accuracyScore.score || 'N/A'}/15
+- Latency: ${scorecardA?.latencyScore.score || 'N/A'}/35
+- I/O: ${scorecardA?.ioEfficiencyScore.score || 'N/A'}/35 (Cache: ${scorecardA?.ioEfficiencyScore.cacheHitRatio?.toFixed(1) || 'N/A'}%)
+- Scalability: ${scorecardA?.scalabilityScore.score || 'N/A'}/30
 - Verdict: ${scorecardA?.verdict || 'Unknown'}
 
 **Plan A Metrics:**
@@ -178,10 +169,9 @@ ${JSON.stringify(planA, null, 2)}
 
 **Plan B Scorecard:**
 - Total Score: ${scorecardB?.totalScore || 'N/A'}/100
-- Latency: ${scorecardB?.latencyScore.score || 'N/A'}/30
-- I/O: ${scorecardB?.ioEfficiencyScore.score || 'N/A'}/30 (Cache: ${scorecardB?.ioEfficiencyScore.cacheHitRatio?.toFixed(1) || 'N/A'}%)
-- Scalability: ${scorecardB?.scalabilityScore.score || 'N/A'}/25
-- Accuracy: ${scorecardB?.accuracyScore.score || 'N/A'}/15
+- Latency: ${scorecardB?.latencyScore.score || 'N/A'}/35
+- I/O: ${scorecardB?.ioEfficiencyScore.score || 'N/A'}/35 (Cache: ${scorecardB?.ioEfficiencyScore.cacheHitRatio?.toFixed(1) || 'N/A'}%)
+- Scalability: ${scorecardB?.scalabilityScore.score || 'N/A'}/30
 - Verdict: ${scorecardB?.verdict || 'Unknown'}
 
 **Plan B Metrics:**

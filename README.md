@@ -13,12 +13,11 @@ QueryViz is a web application that transforms PostgreSQL EXPLAIN plans into inte
 
 ## Performance Scorecard
 
-QueryViz evaluates every query with a **0-100 score** across four categories:
+QueryViz evaluates every query with a **0-100 score** across three key categories:
 
-- **⚡ Latency (30 pts)**: Query execution speed
-- **💾 I/O Efficiency (30 pts)**: RAM vs Disk usage (cache hit ratio)
-- **📈 Scalability (25 pts)**: Index usage and growth potential
-- **🎯 Accuracy (15 pts)**: Planner statistics quality
+- **⚡ Latency (35 pts)**: Query execution speed
+- **💾 I/O Efficiency (35 pts)**: RAM vs Disk usage (cache hit ratio)
+- **📈 Scalability (30 pts)**: Index usage and growth potential
 
 Each query receives an instant verdict:
 - **80-100**: 🌟 Excellent - Production Ready

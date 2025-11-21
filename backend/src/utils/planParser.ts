@@ -41,11 +41,6 @@ export interface PerformanceScorecard {
     maxScore: number;
     details: string;
   };
-  accuracyScore: {
-    score: number;
-    maxScore: number;
-    details: string;
-  };
   verdict: string;
   recommendations: string[];
 }
@@ -234,19 +229,19 @@ export function flattenPlanTree(node: any, level: number = 0): any[] {
 function calculatePerformanceScore(metrics: PlanMetrics, rootPlan: any): PerformanceScorecard {
   const allNodes = flattenPlanTree(rootPlan);
   
-  // 1. Latency Score (Max 30 points)
+  // 1. Latency Score (Max 35 Points) - increased from 30
   let latencyScore = 0;
   let latencyDetails = '';
   const execTime = metrics.executionTime;
   
   if (execTime < 50) {
-    latencyScore = 30;
+    latencyScore = 35;
     latencyDetails = `Execution time ${execTime.toFixed(2)}ms is excellent (< 50ms)`;
   } else if (execTime < 500) {
-    latencyScore = 20;
+    latencyScore = 25;
     latencyDetails = `Execution time ${execTime.toFixed(2)}ms is acceptable (50-500ms)`;
   } else if (execTime < 2000) {
-    latencyScore = 10;
+    latencyScore = 12;
     latencyDetails = `Execution time ${execTime.toFixed(2)}ms needs review (500ms-2s)`;
   } else {
     latencyScore = 0;
@@ -259,23 +254,23 @@ function calculatePerformanceScore(metrics: PlanMetrics, rootPlan: any): Perform
     latencyDetails += `. Planning overhead (${metrics.planningTime.toFixed(2)}ms > ${execTime.toFixed(2)}ms) deducted 5 pts`;
   }
   
-  // 2. I/O Efficiency Score (Max 30 points)
+  // 2. I/O Efficiency Score (Max 35 Points) - increased from 30
   let ioScore = 0;
   const cacheHitRatio = metrics.cacheHitRatio || 0;
   let ioDetails = '';
   
   if (cacheHitRatio > 99) {
-    ioScore = 30;
+    ioScore = 35;
     ioDetails = `Cache hit ratio ${cacheHitRatio.toFixed(1)}% - mostly RAM (excellent)`;
   } else if (cacheHitRatio >= 90) {
-    ioScore = 20;
+    ioScore = 25;
     ioDetails = `Cache hit ratio ${cacheHitRatio.toFixed(1)}% - acceptable`;
   } else {
     ioScore = 0;
     ioDetails = `Cache hit ratio ${cacheHitRatio.toFixed(1)}% - disk heavy (critical)`;
   }
   
-  // 3. Scalability & Indexing Score (Max 25 points)
+  // 3. Scalability & Indexing Score (Max 30 Points) - increased from 25
   let scalabilityScore = 0;
   let scalabilityDetails = '';
   const recommendations: string[] = [];
@@ -285,7 +280,7 @@ function calculatePerformanceScore(metrics: PlanMetrics, rootPlan: any): Perform
   const indexScans = allNodes.filter(n => n.nodeType?.includes('Index'));
   
   if (indexScans.length > 0 && seqScans.length === 0) {
-    scalabilityScore = 25;
+    scalabilityScore = 30;
     scalabilityDetails = `Using index scans with efficient filtering`;
   } else if (seqScans.length > 0) {
     // Check table size from rows
@@ -295,7 +290,7 @@ function calculatePerformanceScore(metrics: PlanMetrics, rootPlan: any): Perform
     const totalRows = largestSeqScan.actualRows + (largestSeqScan['Rows Removed by Filter'] || 0);
     
     if (totalRows < 1000) {
-      scalabilityScore = 20;
+      scalabilityScore = 24;
       scalabilityDetails = `Sequential scan on small table (~${totalRows} rows)`;
     } else {
       scalabilityScore = 0;
@@ -309,60 +304,28 @@ function calculatePerformanceScore(metrics: PlanMetrics, rootPlan: any): Perform
     const totalScanned = rowsRemoved + rowsReturned;
     
     if (totalScanned > 0 && rowsRemoved / totalScanned > 0.5) {
-      scalabilityScore = Math.max(0, scalabilityScore - 10);
+      scalabilityScore = Math.max(0, scalabilityScore - 12);
       scalabilityDetails += `. High filtering: ${rowsRemoved} of ${totalScanned} rows discarded (${(rowsRemoved/totalScanned*100).toFixed(1)}%)`;
       recommendations.push(`Query filters out ${(rowsRemoved/totalScanned*100).toFixed(0)}% of rows - consider adding selective index`);
     }
   } else {
-    scalabilityScore = 15;
+    scalabilityScore = 18;
     scalabilityDetails = `Mixed access patterns detected`;
   }
   
-  // 4. Planner Accuracy Score (Max 15 points)
-  let accuracyScore = 0;
-  let accuracyDetails = '';
+  // Calculate total score
+  const totalScore = latencyScore + ioScore + scalabilityScore;
+  const maxPossibleScore = 100;
   
-  // Check estimation accuracy across all nodes
-  const estimationErrors = allNodes
-    .filter(n => n.planRows > 0 && n.actualRows >= 0)
-    .map(n => ({
-      node: n.nodeType,
-      estimated: n.planRows,
-      actual: n.actualRows,
-      ratio: n.planRows > 0 ? n.actualRows / n.planRows : 1,
-    }));
-  
-  if (estimationErrors.length > 0) {
-    const maxDeviation = Math.max(...estimationErrors.map(e => 
-      Math.max(e.ratio, 1 / e.ratio)
-    ));
-    
-    if (maxDeviation <= 10) {
-      accuracyScore = 15;
-      accuracyDetails = `Planner estimates accurate (within 10x)`;
-    } else if (maxDeviation <= 100) {
-      accuracyScore = 5;
-      accuracyDetails = `Planner estimates off by ${maxDeviation.toFixed(0)}x - consider ANALYZE`;
-      recommendations.push(`Run ANALYZE on tables to update statistics`);
-    } else {
-      accuracyScore = 0;
-      accuracyDetails = `Planner estimates off by ${maxDeviation.toFixed(0)}x - stale statistics`;
-      recommendations.push(`Critical: Run ANALYZE immediately - statistics are very stale`);
-    }
-  } else {
-    accuracyScore = 15;
-    accuracyDetails = `No estimation data available`;
-  }
-  
-  // Generate verdict
-  const totalScore = latencyScore + ioScore + scalabilityScore + accuracyScore;
+  // Generate verdict based on percentage
   let verdict = '';
+  const scorePercentage = (totalScore / maxPossibleScore) * 100;
   
-  if (totalScore >= 80) {
+  if (scorePercentage >= 80) {
     verdict = 'Excellent - Production Ready';
-  } else if (totalScore >= 60) {
+  } else if (scorePercentage >= 60) {
     verdict = 'Good - Minor Optimizations Possible';
-  } else if (totalScore >= 40) {
+  } else if (scorePercentage >= 40) {
     verdict = 'Needs Optimization - Performance Issues Present';
   } else {
     verdict = 'Critical - Significant Performance Problems';
@@ -375,27 +338,22 @@ function calculatePerformanceScore(metrics: PlanMetrics, rootPlan: any): Perform
   
   return {
     totalScore,
-    maxScore: 100,
+    maxScore: maxPossibleScore,
     latencyScore: {
       score: latencyScore,
-      maxScore: 30,
+      maxScore: 35,
       details: latencyDetails,
     },
     ioEfficiencyScore: {
       score: ioScore,
-      maxScore: 30,
+      maxScore: 35,
       cacheHitRatio,
       details: ioDetails,
     },
     scalabilityScore: {
       score: scalabilityScore,
-      maxScore: 25,
+      maxScore: 30,
       details: scalabilityDetails,
-    },
-    accuracyScore: {
-      score: accuracyScore,
-      maxScore: 15,
-      details: accuracyDetails,
     },
     verdict,
     recommendations: [...new Set(recommendations)], // Remove duplicates
