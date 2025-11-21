@@ -3,6 +3,7 @@ import JsonInput from '../components/JsonInput';
 import PlanVisualization from '../components/PlanVisualization';
 import MetricsSummary from '../components/MetricsSummary';
 import LLMAnalysis from '../components/LLMAnalysis';
+import PerformanceScorecard from '../components/PerformanceScorecard';
 import { analyzeSinglePlan } from '../services/api';
 
 export default function SingleAnalysis() {
@@ -72,12 +73,15 @@ export default function SingleAnalysis() {
               <div>
                 <h3 className="font-semibold text-gray-900 mb-1">Analysis Complete</h3>
                 <p className="text-sm text-gray-700">
-                  Your query plan has been analyzed. Review the metrics below, explore the execution tree, and read the AI-powered recommendations.
+                  Your query plan has been analyzed. Review the performance scorecard, metrics, execution tree, and AI recommendations.
                 </p>
               </div>
             </div>
           </div>
 
+          {result.metrics.performanceScore && (
+            <PerformanceScorecard scorecard={result.metrics.performanceScore} />
+          )}
           <MetricsSummary metrics={result.metrics} />
           <PlanVisualization plan={result.plan} />
           <LLMAnalysis analysis={result.analysis} title="AI Performance Analysis & Recommendations" />

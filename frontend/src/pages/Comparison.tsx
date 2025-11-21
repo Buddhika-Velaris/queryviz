@@ -3,6 +3,7 @@ import ComparisonInput from '../components/ComparisonInput';
 import MetricsSummary from '../components/MetricsSummary';
 import PlanVisualization from '../components/PlanVisualization';
 import LLMAnalysis from '../components/LLMAnalysis';
+import PerformanceScorecard from '../components/PerformanceScorecard';
 import { comparePlans } from '../services/api';
 
 export default function Comparison() {
@@ -87,6 +88,12 @@ export default function Comparison() {
                 <h2 className="text-2xl font-bold text-gray-900">Plan A</h2>
                 <span className="ml-3 text-sm text-gray-500">(Original)</span>
               </div>
+              {result.planA.metrics.performanceScore && (
+                <PerformanceScorecard 
+                  scorecard={result.planA.metrics.performanceScore} 
+                  label="Plan A Score"
+                />
+              )}
               <MetricsSummary 
                 metrics={result.planA.metrics} 
                 comparison={result.planB.metrics}
@@ -100,6 +107,12 @@ export default function Comparison() {
                 <h2 className="text-2xl font-bold text-gray-900">Plan B</h2>
                 <span className="ml-3 text-sm text-gray-500">(Optimized)</span>
               </div>
+              {result.planB.metrics.performanceScore && (
+                <PerformanceScorecard 
+                  scorecard={result.planB.metrics.performanceScore} 
+                  label="Plan B Score"
+                />
+              )}
               <MetricsSummary 
                 metrics={result.planB.metrics} 
                 comparison={result.planA.metrics}

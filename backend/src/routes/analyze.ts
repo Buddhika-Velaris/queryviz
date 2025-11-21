@@ -70,11 +70,11 @@ router.post('/single', async (req: Request<{}, {}, SinglePlanRequest>, res: Resp
       });
     }
 
-    // Extract metrics
+    // Extract metrics (includes performance scorecard)
     const metrics = extractPlanMetrics(parsedPlan);
 
-    // Get LLM analysis
-    const llmAnalysis = await analyzeSinglePlan(parsedPlan);
+    // Get LLM analysis with scorecard context
+    const llmAnalysis = await analyzeSinglePlan(parsedPlan, metrics.performanceScore);
 
     const processingTime = Date.now() - startTime;
     console.log(`[API] Single plan analyzed in ${processingTime}ms`);

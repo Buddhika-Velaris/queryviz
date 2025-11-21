@@ -4,11 +4,29 @@ QueryViz is a web application that transforms PostgreSQL EXPLAIN plans into inte
 
 ## Features
 
+- **🎯 Performance Scorecard (0-100)**: Instant quantitative assessment across 4 critical dimensions
 - **Single Query Analysis**: Paste a PostgreSQL EXPLAIN plan and get instant performance insights
 - **Side-by-Side Comparison**: Compare two query plans to validate optimizations
-- **AI-Powered Recommendations**: Get expert-level suggestions powered by OpenAI
+- **AI-Powered Recommendations**: Get expert-level suggestions powered by OpenAI GPT-4o
 - **Interactive Visualization**: Color-coded execution plan tree with click-to-explain nodes
 - **Performance Metrics**: Detailed breakdown of execution time, cost, I/O, and more
+
+## Performance Scorecard
+
+QueryViz evaluates every query with a **0-100 score** across four categories:
+
+- **⚡ Latency (30 pts)**: Query execution speed
+- **💾 I/O Efficiency (30 pts)**: RAM vs Disk usage (cache hit ratio)
+- **📈 Scalability (25 pts)**: Index usage and growth potential
+- **🎯 Accuracy (15 pts)**: Planner statistics quality
+
+Each query receives an instant verdict:
+- **80-100**: 🌟 Excellent - Production Ready
+- **60-79**: ✅ Good - Minor Optimizations
+- **40-59**: ⚠️ Needs Optimization
+- **0-39**: 🚨 Critical Issues
+
+See [PERFORMANCE_SCORECARD.md](PERFORMANCE_SCORECARD.md) for complete framework details.
 
 ## Tech Stack
 
