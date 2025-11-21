@@ -4,23 +4,23 @@ QueryViz now includes a comprehensive **Query Performance Scorecard (0-100)** th
 
 ## Overview
 
-The Performance Scorecard evaluates every query across four critical dimensions and provides a total score out of 100, along with an instant verdict and specific recommendations.
+The Performance Scorecard evaluates every query across three critical dimensions and provides a total score out of 100, along with an instant verdict and specific recommendations.
 
 ## Scoring Categories
 
-### 1. ⚡ Latency Score (Max 30 Points)
+### 1. ⚡ Latency Score (Max 35 Points)
 **Measures:** How fast is the query returning data?
 
 | Execution Time | Score | Rating |
 |----------------|-------|--------|
-| < 50ms | 30 pts | Excellent |
-| 50ms - 500ms | 20 pts | Acceptable |
-| 500ms - 2s | 10 pts | Needs Review |
+| < 50ms | 35 pts | Excellent |
+| 50ms - 500ms | 25 pts | Acceptable |
+| 500ms - 2s | 12 pts | Needs Review |
 | > 2s | 0 pts | Critical |
 
 **Penalty:** If Planning Time > Execution Time, -5 pts is deducted. This indicates query parsing overhead or schema complexity issues.
 
-### 2. 💾 I/O Efficiency Score (Max 30 Points)
+### 2. 💾 I/O Efficiency Score (Max 35 Points)
 **Measures:** Is the query reading from RAM (fast) or Disk (slow)?
 
 **Formula:**
@@ -30,32 +30,21 @@ Cache Hit Ratio = Shared Hit Blocks / (Shared Hit Blocks + Shared Read Blocks)
 
 | Cache Hit Ratio | Score | Rating |
 |-----------------|-------|--------|
-| > 99% | 30 pts | Mostly RAM (Excellent) |
-| 90% - 99% | 20 pts | Acceptable |
+| > 99% | 35 pts | Mostly RAM (Excellent) |
+| 90% - 99% | 25 pts | Acceptable |
 | < 90% | 0 pts | Disk Heavy (Critical) |
 
-### 3. 📈 Scalability & Indexing Score (Max 25 Points)
+### 3. 📈 Scalability & Indexing Score (Max 30 Points)
 **Measures:** Will this query survive if the table grows by 10x or 100x?
 
 | Condition | Observation | Score |
 |-----------|-------------|-------|
-| Index Scan | Specific index used, near-zero rows discarded | 25 pts |
-| Seq Scan (Tiny Table) | Table < 1,000 rows | 20 pts |
+| Index Scan | Specific index used, near-zero rows discarded | 30 pts |
+| Seq Scan (Tiny Table) | Table < 1,000 rows | 24 pts |
 | Seq Scan (Large Table) | Table > 1,000 rows OR High Rows Removed | 0 pts |
-| High Filtering | Rows Removed > 50% of total rows read | -10 pts |
+| High Filtering | Rows Removed > 50% of total rows read | -12 pts |
 
 **Key Insight:** Sequential scans are acceptable on tiny tables but catastrophic on large datasets.
-
-### 4. 🎯 Planner Accuracy Score (Max 15 Points)
-**Measures:** Are the database statistics accurate?
-
-Compares Plan Rows (Estimate) vs Actual Rows across all nodes.
-
-| Deviation | Score | Action Needed |
-|-----------|-------|---------------|
-| Within 10x | 15 pts | Statistics are good |
-| Off by 10-100x | 5 pts | Consider running ANALYZE |
-| Off by > 100x | 0 pts | Run ANALYZE immediately |
 
 ## Verdict System
 
@@ -85,11 +74,10 @@ SELECT * FROM canvas_metadata WHERE canvas_id = 365;
 
 | Category | Score | Details |
 |----------|-------|---------|
-| ⚡ Latency | 25/30 | Execution 13.5ms (excellent), but planning overhead (-5 pts) |
-| 💾 I/O Efficiency | 0/30 | Cache hit ratio 36% - disk heavy |
-| 📈 Scalability | 10/25 | Seq scan with 99% filtering - missing index |
-| 🎯 Accuracy | 15/15 | Perfect planner estimates |
-| **Total** | **50/100** | **⚠️ Needs Optimization** |
+| ⚡ Latency | 30/35 | Execution 13.5ms (excellent), but planning overhead (-5 pts) |
+| 💾 I/O Efficiency | 0/35 | Cache hit ratio 36% - disk heavy |
+| 📈 Scalability | 12/30 | Seq scan with 99% filtering - missing index |
+| **Total** | **42/100** | **⚠️ Needs Optimization** |
 
 **Verdict:** Your query is **Fast but Fragile**.
 
@@ -153,7 +141,6 @@ The scoring algorithm considers:
 - Buffer cache statistics (shared blocks hit/read)
 - Node types and access patterns (index vs sequential scans)
 - Filtering efficiency (rows removed vs returned)
-- Planner estimation accuracy (plan rows vs actual rows)
 - Table size and growth implications
 
 All scores are calculated deterministically from the EXPLAIN (ANALYZE, BUFFERS) output, ensuring consistency and reproducibility.

@@ -9,6 +9,7 @@ interface LLMAnalysisProps {
 }
 
 export default function LLMAnalysis({ analysis, title }: LLMAnalysisProps) {
+  console.log('anaylis', analysis)
   return (
     <div className="bg-gradient-to-br from-white to-blue-50 p-6 rounded-lg shadow-lg border border-blue-100">
       <div className="flex items-center mb-6">
