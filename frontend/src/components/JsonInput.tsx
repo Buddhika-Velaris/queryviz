@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Loader2, Sparkles } from 'lucide-react';
 
 interface JsonInputProps {
   onSubmit: (jsonInput: string) => void;
@@ -10,30 +11,57 @@ export default function JsonInput({ onSubmit, loading }: JsonInputProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (input.trim()) {
-      onSubmit(input);
-    }
+    if (input.trim()) onSubmit(input);
   };
 
+  const ready = !loading && input.trim().length > 0;
+
   return (
-    <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg shadow-md">
-      <label className="block text-sm font-medium text-gray-700 mb-2">
-        Paste PostgreSQL EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) output:
-      </label>
+    <form onSubmit={handleSubmit} className="bg-gray-900 rounded-xl border border-gray-700 overflow-hidden">
+      {/* Toolbar */}
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-700 bg-gray-800/40">
+        <div className="flex gap-1.5">
+          <div className="w-2.5 h-2.5 rounded-full bg-gray-700" />
+          <div className="w-2.5 h-2.5 rounded-full bg-gray-700" />
+          <div className="w-2.5 h-2.5 rounded-full bg-gray-700" />
+        </div>
+        <span className="text-xs text-gray-500 font-mono ml-1">
+          EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) output
+        </span>
+      </div>
+
+      {/* Textarea */}
       <textarea
         value={input}
         onChange={(e) => setInput(e.target.value)}
-        className="w-full h-64 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-        placeholder='[{"Plan": {...}}]'
+        className="w-full h-[300px] px-5 py-4 bg-transparent text-gray-300 font-mono text-xs leading-relaxed resize-none focus:outline-none placeholder-gray-700"
+        placeholder={'[\n  {\n    "Plan": { ... },\n    "Execution Time": 0.0\n  }\n]'}
         disabled={loading}
+        spellCheck={false}
       />
-      <div className="mt-4 flex justify-end">
+
+      {/* Footer */}
+      <div className="flex items-center justify-between px-4 py-3 border-t border-gray-700 bg-gray-800/30">
+        <span className="text-xs text-gray-600 tabular-nums">
+          {input.length > 0 ? `${input.length.toLocaleString()} chars` : 'Paste your JSON here'}
+        </span>
+
         <button
           type="submit"
-          disabled={loading || !input.trim()}
-          className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+          disabled={!ready}
+          className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors"
         >
-          {loading ? 'Analyzing...' : 'Analyze Query'}
+          {loading ? (
+            <>
+              <Loader2 size={14} className="animate-spin" />
+              Analyzing…
+            </>
+          ) : (
+            <>
+              <Sparkles size={14} />
+              Analyze Query
+            </>
+          )}
         </button>
       </div>
     </form>

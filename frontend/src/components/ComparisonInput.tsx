@@ -1,8 +1,51 @@
 import { useState } from 'react';
+import { Loader2, ArrowLeftRight } from 'lucide-react';
 
 interface ComparisonInputProps {
   onSubmit: (planA: string, planB: string) => void;
   loading: boolean;
+}
+
+interface PlanPanelProps {
+  label: string;
+  badge: string;
+  badgeColor: string;
+  value: string;
+  onChange: (v: string) => void;
+  disabled: boolean;
+}
+
+function PlanPanel({ label, badge, badgeColor, value, onChange, disabled }: PlanPanelProps) {
+  return (
+    <div className="flex flex-col bg-gray-900 rounded-xl border border-gray-700 overflow-hidden">
+      {/* Toolbar */}
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-700 bg-gray-800/40">
+        <span
+          className={`text-xs font-bold px-2 py-0.5 rounded-full border ${badgeColor}`}
+        >
+          {badge}
+        </span>
+        <span className="text-xs text-gray-500">{label}</span>
+      </div>
+
+      {/* Textarea */}
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="flex-1 min-h-[300px] px-5 py-4 bg-transparent text-gray-300 font-mono text-xs leading-relaxed resize-none focus:outline-none placeholder-gray-700"
+        placeholder={'[\n  {\n    "Plan": { ... },\n    "Execution Time": 0.0\n  }\n]'}
+        disabled={disabled}
+        spellCheck={false}
+      />
+
+      {/* Char count */}
+      <div className="px-4 py-2 border-t border-gray-700 bg-gray-800/20">
+        <span className="text-xs text-gray-600 tabular-nums">
+          {value.length > 0 ? `${value.length.toLocaleString()} chars` : 'Paste EXPLAIN JSON here'}
+        </span>
+      </div>
+    </div>
+  );
 }
 
 export default function ComparisonInput({ onSubmit, loading }: ComparisonInputProps) {
@@ -11,46 +54,49 @@ export default function ComparisonInput({ onSubmit, loading }: ComparisonInputPr
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (planA.trim() && planB.trim()) {
-      onSubmit(planA, planB);
-    }
+    if (planA.trim() && planB.trim()) onSubmit(planA, planB);
   };
 
+  const ready = !loading && planA.trim().length > 0 && planB.trim().length > 0;
+
   return (
-    <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg shadow-md">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Plan A (Original):
-          </label>
-          <textarea
-            value={planA}
-            onChange={(e) => setPlanA(e.target.value)}
-            className="w-full h-64 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-            placeholder='[{"Plan": {...}}]'
-            disabled={loading}
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Plan B (Optimized):
-          </label>
-          <textarea
-            value={planB}
-            onChange={(e) => setPlanB(e.target.value)}
-            className="w-full h-64 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-            placeholder='[{"Plan": {...}}]'
-            disabled={loading}
-          />
-        </div>
+    <form onSubmit={handleSubmit} className="space-y-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <PlanPanel
+          label="Original query plan"
+          badge="Plan A"
+          badgeColor="bg-blue-500/10 text-blue-400 border-blue-500/30"
+          value={planA}
+          onChange={setPlanA}
+          disabled={loading}
+        />
+        <PlanPanel
+          label="Optimized query plan"
+          badge="Plan B"
+          badgeColor="bg-purple-500/10 text-purple-400 border-purple-500/30"
+          value={planB}
+          onChange={setPlanB}
+          disabled={loading}
+        />
       </div>
-      <div className="mt-4 flex justify-end">
+
+      <div className="flex justify-end">
         <button
           type="submit"
-          disabled={loading || !planA.trim() || !planB.trim()}
-          className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+          disabled={!ready}
+          className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-colors"
         >
-          {loading ? 'Comparing...' : 'Compare Plans'}
+          {loading ? (
+            <>
+              <Loader2 size={14} className="animate-spin" />
+              Comparing…
+            </>
+          ) : (
+            <>
+              <ArrowLeftRight size={14} />
+              Compare Plans
+            </>
+          )}
         </button>
       </div>
     </form>

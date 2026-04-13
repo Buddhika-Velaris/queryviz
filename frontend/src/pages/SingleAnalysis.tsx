@@ -4,6 +4,7 @@ import PlanVisualization from '../components/PlanVisualization';
 import MetricsSummary from '../components/MetricsSummary';
 import LLMAnalysis from '../components/LLMAnalysis';
 import { analyzeSinglePlan } from '../services/api';
+import { Terminal, CheckCircle2, AlertCircle } from 'lucide-react';
 
 export default function SingleAnalysis() {
   const [loading, setLoading] = useState(false);
@@ -26,55 +27,61 @@ export default function SingleAnalysis() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+      {/* Page header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-3">Single Query Analysis</h1>
-        <p className="text-gray-600">Paste your PostgreSQL EXPLAIN output below to get AI-powered performance insights and optimization recommendations.</p>
+        <h1 className="text-2xl font-bold text-gray-100 mb-1">Single Query Analysis</h1>
+        <p className="text-gray-500 text-sm">
+          Paste your <code className="text-blue-300 bg-blue-500/10 px-1.5 py-0.5 rounded font-mono text-xs">
+            EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
+          </code> output to get AI-powered performance insights.
+        </p>
       </div>
 
+      {/* How-to tip — only shown before result */}
       {!result && (
-        <div className="mb-6 bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <span className="text-2xl">💡</span>
-            </div>
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-blue-900 mb-2">How to get your query plan:</h3>
-              <ol className="list-decimal list-inside text-sm text-blue-800 space-y-1">
-                <li>Run in PostgreSQL: <code className="bg-blue-100 px-2 py-1 rounded text-xs">EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) SELECT ...</code></li>
-                <li>Copy the entire JSON output from your database client</li>
-                <li>Paste it in the textarea below and click "Analyze Query"</li>
-              </ol>
-            </div>
+        <div className="mb-6 flex gap-3 p-4 rounded-xl bg-blue-500/10 border border-blue-500/20">
+          <Terminal size={16} className="text-blue-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-blue-300 text-sm font-medium mb-1">How to get your query plan</p>
+            <ol className="text-blue-400/80 text-xs space-y-1 list-decimal list-inside">
+              <li>
+                Run in psql or any client:{' '}
+                <code className="bg-blue-500/10 px-1.5 py-0.5 rounded font-mono">
+                  EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) SELECT …
+                </code>
+              </li>
+              <li>Copy the entire JSON output (the outer array including square brackets)</li>
+              <li>Paste below and click Analyze</li>
+            </ol>
           </div>
         </div>
       )}
 
       <JsonInput onSubmit={handleAnalyze} loading={loading} />
 
+      {/* Error state */}
       {error && (
-        <div className="mt-4 bg-red-50 border-l-4 border-red-500 text-red-700 px-4 py-3 rounded">
-          <div className="flex">
-            <span className="text-xl mr-2">⚠️</span>
-            <div>
-              <p className="font-medium">Error analyzing query plan</p>
-              <p className="text-sm mt-1">{error}</p>
-            </div>
+        <div className="mt-4 flex gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/20">
+          <AlertCircle size={16} className="text-red-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-red-300 text-sm font-medium">Analysis failed</p>
+            <p className="text-red-400/80 text-xs mt-0.5">{error}</p>
           </div>
         </div>
       )}
 
+      {/* Results */}
       {result && (
         <div className="mt-8 space-y-6">
-          <div className="bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 p-4 rounded-lg">
-            <div className="flex items-start">
-              <span className="text-2xl mr-3">✅</span>
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-1">Analysis Complete</h3>
-                <p className="text-sm text-gray-700">
-                  Your query plan has been analyzed. Review the metrics below, explore the execution tree, and read the AI-powered recommendations.
-                </p>
-              </div>
+          {/* Success banner */}
+          <div className="flex gap-3 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+            <CheckCircle2 size={16} className="text-emerald-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-emerald-300 text-sm font-medium">Analysis complete</p>
+              <p className="text-emerald-400/70 text-xs mt-0.5">
+                Review the metrics, explore the execution tree, then read the AI recommendations below.
+              </p>
             </div>
           </div>
 
