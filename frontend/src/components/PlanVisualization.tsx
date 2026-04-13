@@ -2,6 +2,7 @@ import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { explainNode } from '../services/api';
+import PlanFlowchart from './PlanFlowchart';
 
 interface PlanNode {
   'Node Type': string;
@@ -18,16 +19,45 @@ interface PlanVisualizationProps {
 }
 
 export default function PlanVisualization({ plan }: PlanVisualizationProps) {
+  const [viewMode, setViewMode] = useState<'tree' | 'flowchart'>('tree');
   const rootPlan = Array.isArray(plan) ? plan[0]?.Plan : plan.Plan || plan;
   const totalTime = Array.isArray(plan) ? plan[0]?.['Execution Time'] : plan['Execution Time'] || rootPlan['Actual Total Time'] || 100;
 
   return (
     <div className="bg-gray-900 p-6 rounded-lg shadow-md font-mono text-sm">
-      <div className="mb-6">
-        <h2 className="text-lg font-bold text-gray-100 mb-4">NODE-BY-NODE TIMING (ACTUAL VS ESTIMATED ROWS)</h2>
+      <div className="mb-6 flex items-center justify-between">
+        <h2 className="text-lg font-bold text-gray-100">NODE-BY-NODE TIMING (ACTUAL VS ESTIMATED ROWS)</h2>
+        
+        <div className="flex gap-2">
+          <button
+            onClick={() => setViewMode('tree')}
+            className={`px-4 py-2 rounded transition-colors ${
+              viewMode === 'tree' 
+                ? 'bg-blue-600 text-white' 
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            }`}
+          >
+            📋 Tree View
+          </button>
+          <button
+            onClick={() => setViewMode('flowchart')}
+            className={`px-4 py-2 rounded transition-colors ${
+              viewMode === 'flowchart' 
+                ? 'bg-blue-600 text-white' 
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            }`}
+          >
+            📊 Flowchart View
+          </button>
+        </div>
       </div>
+      
       <div className="overflow-x-auto">
-        <PlanNodeComponent node={rootPlan} level={0} totalTime={totalTime} isLast={true} parentPrefix="" />
+        {viewMode === 'tree' ? (
+          <PlanNodeComponent node={rootPlan} level={0} totalTime={totalTime} isLast={true} parentPrefix="" />
+        ) : (
+          <PlanFlowchart plan={plan} />
+        )}
       </div>
     </div>
   );
