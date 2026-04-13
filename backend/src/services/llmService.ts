@@ -14,7 +14,7 @@ function getOpenAI(): OpenAI {
   return openaiInstance;
 }
 
-const MODEL = 'gpt-5.1';
+const MODEL = 'gpt-5.4';
 
 export async function analyzeSinglePlan(planJson: any): Promise<string> {
   const systemPrompt = `You are a world-class PostgreSQL tuning expert. Analyze the provided EXPLAIN (ANALYZE, BUFFERS) JSON output.
@@ -37,7 +37,7 @@ Be specific and reference actual node types, table names, and metrics from the p
         { role: 'user', content: userPrompt },
       ],
       temperature: 0.7,
-      max_completion_tokens: 5100,
+      max_completion_tokens: 16000,
     });
 
     return response.choices[0]?.message?.content || 'No analysis available';
@@ -94,7 +94,7 @@ ${JSON.stringify(planB, null, 2)}`;
         { role: 'user', content: userPrompt },
       ],
       temperature: 0.7,
-      max_completion_tokens: 2000,
+      max_completion_tokens: 16000,
     });
 
     return response.choices[0]?.message?.content || 'No comparison available';
@@ -124,7 +124,7 @@ Your explanation should:
         { role: 'user', content: userPrompt },
       ],
       temperature: 0.5,
-      max_completion_tokens: 5100,
+      max_completion_tokens: 16000,
     });
 
     return response.choices[0]?.message?.content || 'No explanation available';

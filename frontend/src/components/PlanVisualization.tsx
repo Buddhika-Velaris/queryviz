@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { explainNode } from '../services/api';
 
 interface PlanNode {
@@ -20,51 +22,49 @@ export default function PlanVisualization({ plan }: PlanVisualizationProps) {
   const totalTime = Array.isArray(plan) ? plan[0]?.['Execution Time'] : plan['Execution Time'] || rootPlan['Actual Total Time'] || 100;
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-md">
-      <div className="mb-4">
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Execution Plan Tree</h2>
-        <div className="flex items-center gap-6 text-sm text-gray-600">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-red-100 border-2 border-red-300 rounded"></div>
-            <span>Slow (&gt;50%)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-yellow-100 border-2 border-yellow-300 rounded"></div>
-            <span>Moderate (25-50%)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-green-100 border-2 border-green-300 rounded"></div>
-            <span>Fast (&lt;25%)</span>
-          </div>
-          <div className="ml-auto text-xs italic">💡 Click any node for AI explanation</div>
-        </div>
+    <div className="bg-gray-900 p-6 rounded-lg shadow-md font-mono text-sm">
+      <div className="mb-6">
+        <h2 className="text-lg font-bold text-gray-100 mb-4">NODE-BY-NODE TIMING (ACTUAL VS ESTIMATED ROWS)</h2>
       </div>
       <div className="overflow-x-auto">
-        <PlanNodeComponent node={rootPlan} level={0} totalTime={totalTime} />
+        <PlanNodeComponent node={rootPlan} level={0} totalTime={totalTime} isLast={true} parentPrefix="" />
       </div>
     </div>
   );
 }
 
-function PlanNodeComponent({ node, level, totalTime }: { node: PlanNode; level: number; totalTime: number }) {
+function PlanNodeComponent({ 
+  node, 
+  level, 
+  totalTime, 
+  isLast, 
+  parentPrefix 
+}: { 
+  node: PlanNode; 
+  level: number; 
+  totalTime: number; 
+  isLast: boolean;
+  parentPrefix: string;
+}) {
   const [explanation, setExplanation] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(true);
 
   const actualTime = node['Actual Total Time'] || 0;
+  const actualRows = node['Actual Rows'] || 0;
+  const planRows = node['Plan Rows'] || 0;
   const timePercentage = totalTime > 0 ? (actualTime / totalTime) * 100 : 0;
   const hasChildren = node.Plans && node.Plans.length > 0;
   
-  const getBackgroundColor = () => {
-    if (timePercentage > 50) return 'bg-red-100 border-red-400 hover:bg-red-200';
-    if (timePercentage > 25) return 'bg-yellow-100 border-yellow-400 hover:bg-yellow-200';
-    return 'bg-green-100 border-green-400 hover:bg-green-200';
-  };
+  const rowDiff = planRows > 0 ? Math.abs((actualRows - planRows) / planRows * 100) : 0;
+  const isRowEstimateOff = rowDiff > 50;
+  const isHotspot = timePercentage > 50;
+  const isFast = actualTime < 1;
   
-  const getPerformanceIcon = () => {
-    if (timePercentage > 50) return '🔴';
-    if (timePercentage > 25) return '🟡';
-    return '🟢';
+  const getTimingColor = () => {
+    if (isHotspot) return 'bg-orange-500';
+    if (timePercentage > 25) return 'bg-blue-500';
+    return 'bg-green-500';
   };
 
   const handleNodeClick = async (e: React.MouseEvent) => {
@@ -81,73 +81,135 @@ function PlanNodeComponent({ node, level, totalTime }: { node: PlanNode; level: 
       setExplanation(result);
     } catch (error) {
       console.error('Failed to explain node:', error);
-      setExplanation('Unable to load explanation. Click to try again.');
+      setExplanation('Unable to load explanation.');
     } finally {
       setLoading(false);
     }
   };
 
+  const connector = level === 0 ? '' : isLast ? '└── ' : '├── ';
+  const currentPrefix = parentPrefix + (level === 0 ? '' : isLast ? '    ' : '│   ');
+
   return (
-    <div className="mb-2" style={{ paddingLeft: `${level * 2}rem` }}>
-      <div
-        className={`p-3 border-l-4 rounded cursor-pointer transition-all ${getBackgroundColor()}`}
-      >
-        <div className="flex justify-between items-start">
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              {hasChildren && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setExpanded(!expanded);
-                  }}
-                  className="text-gray-500 hover:text-gray-700 font-bold"
-                >
-                  {expanded ? '▼' : '▶'}
-                </button>
-              )}
-              <span className="text-lg">{getPerformanceIcon()}</span>
-              <span className="font-semibold text-gray-900">{node['Node Type']}</span>
-              {node['Relation Name'] && (
-                <span className="text-gray-600">on <span className="font-medium">{node['Relation Name']}</span></span>
-              )}
-              {node['Index Name'] && (
-                <span className="text-blue-600">using <span className="font-medium">{node['Index Name']}</span></span>
-              )}
+    <>
+      <div className="flex items-start justify-between py-1 hover:bg-gray-800 group">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-gray-500 whitespace-pre">{parentPrefix}{connector}</span>
+            
+            {hasChildren && (
               <button
-                onClick={handleNodeClick}
-                className="ml-2 text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setExpanded(!expanded);
+                }}
+                className="text-gray-400 hover:text-gray-200 px-1"
               >
-                {loading ? '...' : explanation ? '✕ Close' : 'ℹ️ Explain'}
+                {expanded ? '▼' : '▶'}
               </button>
-            </div>
-            <div className="mt-1 text-sm text-gray-600 ml-8">
-              <span className="font-medium">Rows:</span> {(node['Actual Rows'] || 0).toLocaleString()}
-              <span className="ml-4 font-medium">Cost:</span> {node['Total Cost']?.toFixed(2) || 0}
-              {actualTime > 0 && (
-                <>
-                  <span className="ml-4 font-medium">Time:</span>{' '}
-                  <span className={timePercentage > 50 ? 'text-red-600 font-semibold' : ''}>
-                    {actualTime.toFixed(2)}ms ({timePercentage.toFixed(1)}%)
-                  </span>
-                </>
+            )}
+            
+            <span className="text-gray-200 font-medium">
+              {node['Node Type']}
+              {node['Relation Name'] && ` → ${node['Relation Name']}`}
+            </span>
+            
+            <button
+              onClick={handleNodeClick}
+              className={`px-2 py-0.5 text-xs rounded transition-colors ${
+                explanation 
+                  ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600 opacity-60 group-hover:opacity-100'
+              }`}
+              title={explanation ? 'Hide AI explanation' : 'Show AI explanation'}
+            >
+              {loading ? '⏳' : explanation ? '✕ Close AI' : 'ℹ️ AI'}
+            </button>
+            
+            {isRowEstimateOff && (
+              <span className="px-2 py-0.5 bg-orange-500 text-white text-xs rounded">row estimate off</span>
+            )}
+            
+            {isHotspot && actualTime > 0 && (
+              <span className="px-2 py-0.5 bg-orange-500 text-white text-xs rounded">~{actualTime.toFixed(0)}ms hotspot</span>
+            )}
+            
+            {isFast && (
+              <span className="px-2 py-0.5 bg-green-600 text-white text-xs rounded">fast</span>
+            )}
+            
+            {actualRows > 1000 && (
+              <span className="px-2 py-0.5 bg-yellow-600 text-gray-900 text-xs rounded">{actualRows.toLocaleString()} rows</span>
+            )}
+            
+            {node['Index Name'] && (
+              <span className="text-gray-400 text-xs">using {node['Index Name']}</span>
+            )}
+          </div>
+          
+          {(planRows > 0 || node['Actual Loops']) && (
+            <div className="ml-8 mt-1 text-gray-500 text-xs">
+              {planRows > 0 && (
+                <span>Estimated {planRows.toLocaleString()} rows • actual {actualRows.toLocaleString()} rows</span>
+              )}
+              {node['Actual Loops'] && node['Actual Loops'] > 1 && (
+                <span className="ml-2">• {node['Actual Loops'].toLocaleString()} iterations on inner side</span>
+              )}
+              {node['Filter'] && (
+                <span className="ml-2">• filter: {node['Filter']}</span>
               )}
             </div>
-          </div>
+          )}
+          
+          {explanation && (
+            <div className="ml-8 mt-2 p-3 bg-gray-800 border border-gray-700 rounded text-xs leading-relaxed">
+              <div className="text-blue-400 font-semibold mb-2 flex items-center gap-2">
+                💡 AI Explanation:
+              </div>
+              <ReactMarkdown 
+                remarkPlugins={[remarkGfm]}
+                className="prose prose-sm prose-invert max-w-none text-gray-300"
+                components={{
+                  p: ({node, ...props}) => <p className="mb-2 last:mb-0" {...props} />,
+                  strong: ({node, ...props}) => <strong className="text-gray-100 font-bold" {...props} />,
+                  em: ({node, ...props}) => <em className="text-gray-200 italic" {...props} />,
+                  code: ({node, ...props}) => <code className="bg-gray-700 px-1 py-0.5 rounded text-blue-300" {...props} />,
+                  ul: ({node, ...props}) => <ul className="list-disc list-inside mb-2 space-y-1" {...props} />,
+                  ol: ({node, ...props}) => <ol className="list-decimal list-inside mb-2 space-y-1" {...props} />,
+                  li: ({node, ...props}) => <li className="text-gray-300" {...props} />,
+                }}
+              >
+                {explanation}
+              </ReactMarkdown>
+            </div>
+          )}
         </div>
-        {explanation && (
-          <div className="mt-3 p-3 bg-white rounded border-2 border-blue-300 shadow-sm text-sm leading-relaxed">
-            <div className="font-semibold text-blue-900 mb-1">💡 AI Explanation:</div>
-            {explanation}
-          </div>
-        )}
-        {loading && (
-          <div className="mt-2 text-sm text-gray-500 italic">Loading AI explanation...</div>
-        )}
+        
+        <div className="flex items-center gap-3 ml-4 flex-shrink-0">
+          {actualTime > 0 && (
+            <>
+              <div className="w-32 h-2 bg-gray-700 rounded overflow-hidden">
+                <div 
+                  className={`h-full ${getTimingColor()}`}
+                  style={{ width: `${Math.min(timePercentage, 100)}%` }}
+                />
+              </div>
+              <span className="text-gray-300 w-16 text-right">{actualTime.toFixed(0)}ms</span>
+            </>
+          )}
+        </div>
       </div>
+      
       {expanded && hasChildren && node.Plans!.map((childNode, index) => (
-        <PlanNodeComponent key={index} node={childNode} level={level + 1} totalTime={totalTime} />
+        <PlanNodeComponent 
+          key={index} 
+          node={childNode} 
+          level={level + 1} 
+          totalTime={totalTime}
+          isLast={index === node.Plans!.length - 1}
+          parentPrefix={currentPrefix}
+        />
       ))}
-    </div>
+    </>
   );
 }
