@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { BarChart2, ArrowLeftRight } from 'lucide-react';
+import { BarChart2, ArrowLeftRight, BookOpen } from 'lucide-react';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -51,6 +51,18 @@ export default function Layout({ children }: LayoutProps) {
               >
                 <ArrowLeftRight size={14} />
                 <span>Compare</span>
+              </Link>
+
+              <Link
+                to="/learn"
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  isActive('/learn')
+                    ? 'bg-blue-600/20 text-blue-400'
+                    : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800'
+                }`}
+              >
+                <BookOpen size={14} />
+                <span>Learn</span>
               </Link>
 
               <div className="w-px h-5 bg-gray-700 mx-1" />
