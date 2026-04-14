@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { BarChart2, ArrowLeftRight, BookOpen, Globe } from 'lucide-react';
+import { BarChart2, ArrowLeftRight, BookOpen, Skull } from 'lucide-react';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -71,10 +71,10 @@ export default function Layout({ children }: LayoutProps) {
                 href="https://it-works-locally.vercel.app/"
                 target="_blank"
                 rel="noopener noreferrer"
+                aria-label="My Blog"
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-gray-400 hover:text-gray-100 hover:bg-gray-800 transition-colors"
               >
-                <Globe size={14} />
-                <span className="hidden sm:inline">My Blog</span>
+                <Skull size={16} />
               </a>
 
               <div className="w-px h-5 bg-gray-700 mx-1" />
