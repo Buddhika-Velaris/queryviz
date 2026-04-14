@@ -170,6 +170,15 @@ export default function Learn() {
                       </SyntaxHighlighter>
                     );
                   }
+                  // Plain fenced code block (no language tag) — preserve whitespace
+                  const raw = String(children);
+                  if (raw.includes('\n')) {
+                    return (
+                      <pre className="learn-plain-code">
+                        <code>{raw.replace(/\n$/, '')}</code>
+                      </pre>
+                    );
+                  }
                   return (
                     <code className="bg-gray-800 text-blue-300 px-1.5 py-0.5 rounded text-[0.72rem] font-mono">
                       {children}

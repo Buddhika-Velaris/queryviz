@@ -8,40 +8,308 @@ This guide was created based on the source **Mastering Postgres** (by Aaron Fran
 
 ## Table of Contents
 
-1. [Data Integrity & Constraints](#1-data-integrity--constraints)
-2. [Time & Date Types](#2-time--date-types)
-3. [Numeric & ID Types](#3-numeric--id-types)
-4. [String & Text Types](#4-string--text-types)
-5. [JSON Types](#5-json-types)
-6. [Arrays](#6-arrays)
-7. [Range Types](#7-range-types)
-8. [Generated Columns](#8-generated-columns)
-9. [Full-Text Search](#9-full-text-search)
-10. [Composite & Enum Types](#10-composite--enum-types)
-11. [Indexes — Theory & Practice](#11-indexes--theory--practice)
-12. [EXPLAIN & Query Analysis](#12-explain--query-analysis)
-13. [Joins](#13-joins)
-14. [Subqueries](#14-subqueries)
-15. [Lateral Joins](#15-lateral-joins)
-16. [Window Functions](#16-window-functions)
-17. [CTEs (Common Table Expressions)](#17-ctes-common-table-expressions)
-18. [Transactions & Concurrency Control](#18-transactions--concurrency-control)
-19. [Table Partitioning](#19-table-partitioning)
-20. [Views & Materialized Views](#20-views--materialized-views)
-21. [Stored Procedures & Functions](#21-stored-procedures--functions)
-22. [Triggers & Event-Driven Logic](#22-triggers--event-driven-logic)
-23. [Roles, Privileges & Row-Level Security](#23-roles-privileges--row-level-security)
-24. [Performance Tuning & Configuration](#24-performance-tuning--configuration)
-25. [Vacuum, Autovacuum & Bloat Management](#25-vacuum-autovacuum--bloat-management)
-26. [Backup, Recovery & Replication](#26-backup-recovery--replication)
-27. [Extensions](#27-extensions)
-28. [Utility Patterns & Recipes](#28-utility-patterns--recipes)
-29. [Quick Reference Cheatsheet](#29-quick-reference-cheatsheet)
-30. [Anti-Patterns to Avoid](#30-anti-patterns-to-avoid)
+1. [Introduction to PostgreSQL](#1-introduction-to-postgresql)
+2. [Schemas & Database Organization](#2-schemas-database-organization)
+3. [Data Integrity & Constraints](#3-data-integrity-constraints)
+4. [Domain Types](#4-domain-types)
+5. [NULL Handling & COALESCE Patterns](#5-null-handling-coalesce-patterns)
+6. [Time & Date Types](#6-time-date-types)
+7. [Numeric & ID Types](#7-numeric-id-types)
+8. [Sequences & Identity Columns](#8-sequences-identity-columns)
+9. [String & Text Types](#9-string-text-types)
+10. [Character Sets, Collations & Encoding](#10-character-sets-collations-encoding)
+11. [Casting & Type Conversion](#11-casting-type-conversion)
+12. [Binary Data & Bit Strings](#12-binary-data-bit-strings)
+13. [Network & MAC Address Types](#13-network-mac-address-types)
+14. [JSON Types](#14-json-types)
+15. [Arrays](#15-arrays)
+16. [Range Types](#16-range-types)
+17. [Generated Columns](#17-generated-columns)
+18. [Composite & Enum Types](#18-composite-enum-types)
+19. [Full-Text Search](#19-full-text-search)
+20. [Indexes — Theory & Practice](#20-indexes-theory-practice)
+21. [EXPLAIN & Query Analysis](#21-explain-query-analysis)
+22. [Joins](#22-joins)
+23. [Subqueries](#23-subqueries)
+24. [Lateral Joins](#24-lateral-joins)
+25. [SET Operations & Combining Queries](#25-set-operations-combining-queries)
+26. [Window Functions](#26-window-functions)
+27. [Grouping Sets, ROLLUP & CUBE](#27-grouping-sets-rollup-cube)
+28. [CTEs (Common Table Expressions)](#28-ctes-common-table-expressions)
+29. [Transactions & Concurrency Control](#29-transactions-concurrency-control)
+30. [Table Partitioning](#30-table-partitioning)
+31. [Views & Materialized Views](#31-views-materialized-views)
+32. [Stored Procedures & Functions](#32-stored-procedures-functions)
+33. [Triggers & Event-Driven Logic](#33-triggers-event-driven-logic)
+34. [Roles, Privileges & Row-Level Security](#34-roles-privileges-row-level-security)
+35. [Performance Tuning & Configuration](#35-performance-tuning-configuration)
+36. [Vacuum, Autovacuum & Bloat Management](#36-vacuum-autovacuum-bloat-management)
+37. [Backup, Recovery & Replication](#37-backup-recovery-replication)
+38. [Extensions](#38-extensions)
+39. [pgvector & Semantic Search](#39-pgvector-semantic-search)
+40. [Utility Patterns & Recipes](#40-utility-patterns-recipes)
+41. [Quick Reference Cheatsheet](#41-quick-reference-cheatsheet)
+42. [Anti-Patterns to Avoid](#42-anti-patterns-to-avoid)
 
 ---
 
-## 1. Data Integrity & Constraints
+## 1. Introduction to PostgreSQL
+
+PostgreSQL (often called Postgres) is a powerful, open-source object-relational database management system with over 35 years of active development. It is known for its standards compliance, reliability, feature robustness, and extensibility.
+
+### 🌍 When You'll Use This in the Real World
+
+- **Any production application**: Postgres is the go-to choice for startups and enterprises alike — from small SaaS products to systems handling billions of rows.
+- **Analytics workloads**: Postgres supports complex analytical queries, window functions, and CTEs that rival dedicated analytical databases.
+- **Geospatial applications**: With the PostGIS extension, Postgres becomes one of the most capable spatial databases available.
+- **Full-text search**: Built-in FTS eliminates the need for a separate search service in many applications.
+
+### Architecture Overview
+
+```
+Client App
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│              PostgreSQL Server          │
+│                                         │
+│  Postmaster ──► Connection Pool         │
+│                      │                  │
+│              ┌───────▼────────┐         │
+│              │  Query Engine  │         │
+│              │  Parser        │         │
+│              │  Planner       │         │
+│              │  Executor      │         │
+│              └───────┬────────┘         │
+│                      │                  │
+│         ┌────────────▼──────────────┐   │
+│         │    Storage Engine         │   │
+│         │  Shared Buffer Cache      │   │
+│         │  WAL (Write-Ahead Log)    │   │
+│         │  Heap Files / TOAST       │   │
+│         └───────────────────────────┘   │
+└─────────────────────────────────────────┘
+```
+
+### Key Concepts
+
+| Concept | Description |
+|---|---|
+| **MVCC** | Multi-Version Concurrency Control — readers never block writers |
+| **WAL** | Write-Ahead Logging — guarantees durability and enables replication |
+| **TOAST** | The Oversized-Attribute Storage Technique — handles large values transparently |
+| **Shared Buffers** | In-memory page cache — tune to ~25% of RAM |
+| **Autovacuum** | Background process that reclaims dead tuple space and updates statistics |
+| **Extensions** | First-class plugin system: PostGIS, pgvector, pg_stat_statements, etc. |
+
+### Data Flow: From Query to Result
+
+1. Client sends SQL over a TCP connection (or Unix socket)
+2. **Parser** converts SQL text into a parse tree
+3. **Analyzer** validates names, types, and permissions
+4. **Rewriter** applies view and rule rewrites
+5. **Planner/Optimizer** generates the lowest-cost execution plan
+6. **Executor** runs the plan, reading from shared buffers or disk
+7. Result rows are streamed back to the client
+
+### Version Landscape
+
+- **PostgreSQL 14+**: Pipeline mode, improved partitioning, logical replication improvements
+- **PostgreSQL 15+**: `MERGE` statement, row filtering for publications
+- **PostgreSQL 16+**: Logical replication from standbys, parallel queries improvements
+- **PostgreSQL 17+**: Incremental backup, vectorized I/O, JSON improvements
+
+Always use the latest stable release for new projects.
+
+### Installation Quick Reference
+
+```bash
+# macOS (Homebrew)
+brew install postgresql@16
+brew services start postgresql@16
+
+# Ubuntu/Debian
+sudo apt install postgresql-16
+
+# Docker
+docker run -e POSTGRES_PASSWORD=pass -p 5432:5432 postgres:16
+
+# Connect
+psql -U postgres -h localhost
+```
+
+### Essential psql Commands
+
+```sql
+\l          -- list databases
+\c dbname   -- connect to database
+\dt         -- list tables
+\d table    -- describe table
+\di         -- list indexes
+\dn         -- list schemas
+\du         -- list roles
+\x          -- toggle expanded output
+\timing     -- show query execution time
+\e          -- open editor
+\q          -- quit
+```
+
+---
+
+## 2. Schemas & Database Organization
+
+A **schema** in PostgreSQL is a named namespace within a database. It acts like a folder that groups tables, views, functions, sequences, and other objects together. Every database starts with a `public` schema by default.
+
+### 🌍 When You'll Use This in the Real World
+
+- **Multi-tenant applications**: Use one schema per tenant (`tenant_acme`, `tenant_beta`) to isolate data while sharing a single database instance and connection pool.
+- **Microservices sharing a database**: Give each service its own schema (`orders`, `inventory`, `users`) to enforce ownership boundaries without running separate databases.
+- **Versioned APIs**: Maintain `api_v1` and `api_v2` schemas with views that expose stable interfaces over evolving underlying tables.
+- **Separation of concerns**: Keep `app`, `audit`, `analytics`, and `staging` schemas to partition operational, auditing, reporting, and ETL objects.
+
+### Schema Hierarchy
+
+```
+PostgreSQL Cluster
+└── Database: my_app
+    ├── Schema: public          ← default, visible by default
+    ├── Schema: app             ← application tables
+    ├── Schema: audit           ← audit/history tables
+    ├── Schema: analytics       ← reporting views & aggregates
+    └── Schema: staging         ← ETL staging area
+```
+
+### Schema vs Database
+
+| Feature | Schema | Database |
+|---|---|---|
+| Cross-object joins | ✅ Easy — same connection | ❌ Requires foreign data wrappers |
+| Connection isolation | Shared connection | Separate connection required |
+| Access control | Per-schema GRANT | Per-database permissions |
+| Use case | Logical grouping | Full isolation (different apps) |
+
+### Working with Schemas
+
+```sql
+-- Create a schema
+CREATE SCHEMA app;
+CREATE SCHEMA audit;
+
+-- Create a schema and assign ownership
+CREATE SCHEMA analytics AUTHORIZATION reporting_user;
+
+-- Create a table in a specific schema
+CREATE TABLE app.users (
+  id    BIGSERIAL PRIMARY KEY,
+  email TEXT NOT NULL UNIQUE
+);
+
+-- Reference objects across schemas (same database)
+SELECT u.email, o.total
+FROM app.users u
+JOIN orders.invoices o ON o.user_id = u.id;
+
+-- Drop a schema and everything in it
+DROP SCHEMA staging CASCADE;
+```
+
+### The search_path
+
+`search_path` controls which schemas Postgres looks in when you use an unqualified name (e.g., `users` instead of `app.users`):
+
+```sql
+-- Show current search path
+SHOW search_path;
+-- Default: "$user", public
+
+-- Set for the current session
+SET search_path = app, public;
+
+-- Set permanently for a role
+ALTER ROLE app_user SET search_path = app, public;
+
+-- Set for a database
+ALTER DATABASE my_app SET search_path = app, public;
+```
+
+> **Gotcha**: The default `public` schema is writable by all users. Always restrict it:
+> `REVOKE CREATE ON SCHEMA public FROM PUBLIC;`
+
+### Information Schema & Catalog Queries
+
+```sql
+-- List all schemas
+SELECT schema_name FROM information_schema.schemata;
+
+-- List tables in a schema
+SELECT table_name
+FROM information_schema.tables
+WHERE table_schema = 'app';
+
+-- Same via pg_catalog (faster for large systems)
+SELECT tablename FROM pg_tables WHERE schemaname = 'app';
+
+-- Show all objects in a schema
+SELECT n.nspname AS schema, c.relname AS name, c.relkind AS type
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'app'
+ORDER BY c.relkind, c.relname;
+```
+
+`relkind` values: `r` = table, `i` = index, `v` = view, `m` = materialized view, `S` = sequence, `f` = foreign table.
+
+### Schema Permissions
+
+```sql
+-- Grant usage (allow seeing the schema)
+GRANT USAGE ON SCHEMA app TO app_user;
+
+-- Grant all future tables in schema to a role
+ALTER DEFAULT PRIVILEGES IN SCHEMA app
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app_user;
+
+-- Grant sequence usage (needed for SERIAL/BIGSERIAL inserts)
+ALTER DEFAULT PRIVILEGES IN SCHEMA app
+  GRANT USAGE, SELECT ON SEQUENCES TO app_user;
+
+-- Read-only analytics role
+GRANT USAGE ON SCHEMA app, analytics TO analyst;
+GRANT SELECT ON ALL TABLES IN SCHEMA app TO analyst;
+ALTER DEFAULT PRIVILEGES IN SCHEMA app
+  GRANT SELECT ON TABLES TO analyst;
+```
+
+### Multi-Tenant Schema Pattern
+
+```sql
+-- Function to create a new tenant schema
+CREATE OR REPLACE FUNCTION create_tenant(tenant_name TEXT) RETURNS VOID AS $
+BEGIN
+  EXECUTE format('CREATE SCHEMA %I', tenant_name);
+  EXECUTE format('CREATE TABLE %I.users (id BIGSERIAL PRIMARY KEY, email TEXT NOT NULL)', tenant_name);
+  EXECUTE format('CREATE TABLE %I.orders (id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL)', tenant_name);
+  EXECUTE format('GRANT USAGE ON SCHEMA %I TO app_user', tenant_name);
+  EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA %I TO app_user', tenant_name);
+END;
+$ LANGUAGE plpgsql;
+
+-- Usage
+SELECT create_tenant('acme_corp');
+SELECT create_tenant('beta_inc');
+```
+
+### Best Practices
+
+- **Always qualify object names** in migrations and scripts: `app.users`, not just `users`.
+- **Restrict `public` schema**: Remove default CREATE privileges to prevent accidental pollution.
+- **Use `search_path` per role**: Set it at the role level, not in application connection strings.
+- **Separate concerns**: Keep audit tables, staging tables, and analytics views in their own schemas — never mix everything in `public`.
+- **Avoid too many schemas**: More than ~20 schemas per database starts to create management overhead. For massive multi-tenancy, consider row-level security instead.
+
+---
+
+## 3. Data Integrity & Constraints
 
 Data integrity is the foundation of a trustworthy database. PostgreSQL offers the richest constraint system of any relational database — use it aggressively.
 
@@ -169,7 +437,378 @@ ALTER TABLE orders VALIDATE CONSTRAINT orders_amount_positive;
 
 ---
 
-## 2. Time & Date Types
+## 4. Domain Types
+
+A **domain** is a named data type built on top of an existing base type, with optional constraints attached directly to the type. Wherever the domain is used as a column type, those constraints are automatically enforced — without repeating `CHECK` clauses on every table.
+
+### 🌍 When You'll Use This in the Real World
+
+- Enforcing email format validation across dozens of tables without copy-pasting the same regex `CHECK` constraint everywhere.
+- Defining `positive_int` or `non_negative_numeric` as canonical types that self-document intent and prevent negative prices, quantities, or ages.
+- Standardizing US ZIP codes, phone numbers, ISO country codes, or percentage values across a shared schema used by multiple applications.
+- Making ALTER TABLE migrations easier — change the domain once, and all columns using it inherit the updated constraint.
+
+### Creating a Domain
+
+```sql
+-- Syntax
+CREATE DOMAIN domain_name AS base_type
+  [ DEFAULT expression ]
+  [ CONSTRAINT constraint_name ] CHECK (VALUE <condition>)
+  [ NOT NULL ];
+
+-- Examples
+CREATE DOMAIN email_address AS text
+  CHECK (VALUE ~* '^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$');
+
+CREATE DOMAIN positive_int AS integer
+  CHECK (VALUE > 0);
+
+CREATE DOMAIN non_negative_numeric AS numeric(15,4)
+  CHECK (VALUE >= 0);
+
+CREATE DOMAIN us_zip AS text
+  CHECK (VALUE ~ '^\d{5}(-\d{4})?$');
+
+CREATE DOMAIN iso_country_code AS char(2)
+  CHECK (VALUE ~ '^[A-Z]{2}$');
+
+CREATE DOMAIN percentage AS numeric(5,2)
+  DEFAULT 0
+  CHECK (VALUE BETWEEN 0 AND 100);
+```
+
+### Using Domains in Table Definitions
+
+```sql
+CREATE TABLE users (
+    id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    email       email_address NOT NULL UNIQUE,
+    signup_date date NOT NULL DEFAULT current_date
+);
+
+CREATE TABLE products (
+    id       bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    price    non_negative_numeric NOT NULL,
+    quantity positive_int NOT NULL,
+    discount percentage DEFAULT 0
+);
+
+CREATE TABLE addresses (
+    id      bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    zip     us_zip,
+    country iso_country_code NOT NULL
+);
+```
+
+Any INSERT or UPDATE that violates the domain constraint fails immediately with a clear error message that identifies the domain name.
+
+### Adding and Altering Domain Constraints
+
+```sql
+-- Add a new constraint to an existing domain
+ALTER DOMAIN email_address
+  ADD CONSTRAINT email_not_empty CHECK (length(VALUE) > 0);
+
+-- Drop a constraint by name
+ALTER DOMAIN email_address
+  DROP CONSTRAINT email_not_empty;
+
+-- Set or drop a default
+ALTER DOMAIN percentage SET DEFAULT 0;
+ALTER DOMAIN percentage DROP DEFAULT;
+
+-- Make the domain NOT NULL
+ALTER DOMAIN positive_int SET NOT NULL;
+ALTER DOMAIN positive_int DROP NOT NULL;
+```
+
+When you add a constraint to a domain with `NOT VALID`, existing rows are not checked immediately:
+
+```sql
+ALTER DOMAIN email_address
+  ADD CONSTRAINT email_no_plus CHECK (VALUE NOT LIKE '%+%') NOT VALID;
+
+-- Validate existing data separately (acquires a weaker lock)
+ALTER DOMAIN email_address VALIDATE CONSTRAINT email_no_plus;
+```
+
+### Dropping a Domain
+
+```sql
+-- Fails if any column still uses the domain
+DROP DOMAIN email_address;
+
+-- Cascade: converts all columns back to the base type, drops constraints
+DROP DOMAIN email_address CASCADE;
+```
+
+### Inspecting Domains
+
+```sql
+-- List all domains in the current schema
+SELECT
+    t.typname AS domain_name,
+    pg_catalog.format_type(t.typbasetype, t.typtypmod) AS base_type,
+    t.typdefault AS default_value,
+    c.conname AS constraint_name,
+    pg_get_constraintdef(c.oid) AS constraint_def
+FROM pg_type t
+LEFT JOIN pg_constraint c ON c.contypid = t.oid
+WHERE t.typtype = 'd'
+  AND t.typnamespace = 'public'::regnamespace
+ORDER BY t.typname, c.conname;
+```
+
+### Domains vs CHECK Constraints — When to Choose Which
+
+| Factor | Domain | Per-column CHECK |
+|--------|--------|-----------------|
+| Reused across many tables | Ideal | Verbose, copy-paste drift |
+| Single-table, one-off rule | Overkill | Appropriate |
+| Self-documenting type name | Yes — the type name is the documentation | No |
+| Migration: change the rule | One ALTER DOMAIN | Must find and alter every table |
+| Error message clarity | Mentions domain name | Generic |
+| Performance | Identical | Identical |
+| Function parameter validation | Can use domain as parameter type | Cannot |
+
+### Domains as Function Parameter Types
+
+```sql
+-- Domain used as a parameter type gives free input validation
+CREATE FUNCTION send_welcome_email(addr email_address) RETURNS void
+  LANGUAGE plpgsql AS $$
+BEGIN
+  -- addr is guaranteed to be a valid email here
+  PERFORM pg_notify('email_queue', addr::text);
+END;
+$$;
+
+-- This will fail before the function body even runs:
+SELECT send_welcome_email('not-an-email');
+-- ERROR: value for domain email_address violates check constraint
+```
+
+### Best Practices
+
+- Name domains after what they represent, not how they are stored (`email_address` not `email_text`).
+- Always name domain constraints explicitly so error messages and migrations are readable.
+- Use `NOT VALID` + `VALIDATE CONSTRAINT` when adding constraints to an existing high-traffic domain to avoid a full table scan under lock.
+- Do not create domains for types used in only one place — a plain `CHECK` constraint is simpler there.
+- Domains compose: you can create a domain on top of another domain, inheriting its constraints and adding more.
+
+---
+
+## 5. NULL Handling & COALESCE Patterns
+
+`NULL` in SQL is not a value — it is a marker for an unknown or inapplicable value. This distinction has profound implications for query logic because `NULL` propagates through almost all expressions and comparisons in ways that violate ordinary two-valued Boolean logic. Misunderstanding `NULL` is one of the most common sources of silent bugs in SQL.
+
+### 🌍 When You'll Use This in the Real World
+
+- A `WHERE email != 'admin@example.com'` filter silently excludes all users with `NULL` email addresses.
+- A `COUNT(column)` returns a different number than `COUNT(*)` because the column has NULLs.
+- A `NOT IN (subquery)` returns zero rows because the subquery contains a NULL.
+- A `UNIQUE` constraint allows multiple NULL values — this surprises many developers.
+- A LEFT JOIN with a WHERE clause on the right-side column accidentally becomes an INNER JOIN.
+
+### Three-Valued Logic
+
+SQL uses three-valued logic: `TRUE`, `FALSE`, and `UNKNOWN` (which is what NULL comparisons produce). Any expression that involves NULL evaluates to `UNKNOWN`, and `UNKNOWN` is treated as `FALSE` in a `WHERE` clause:
+
+```sql
+SELECT NULL = NULL;      -- NULL (not TRUE!)
+SELECT NULL != NULL;     -- NULL
+SELECT NULL = 1;         -- NULL
+SELECT NULL IS NULL;     -- TRUE  (use IS NULL, not = NULL)
+SELECT NULL IS NOT NULL; -- FALSE
+
+-- Three-valued logic table for AND
+-- TRUE  AND NULL = NULL (unknown)
+-- FALSE AND NULL = FALSE (false wins for AND)
+-- NULL  AND NULL = NULL
+
+-- Three-valued logic table for OR
+-- TRUE  OR NULL = TRUE (true wins for OR)
+-- FALSE OR NULL = NULL (unknown)
+-- NULL  OR NULL = NULL
+
+SELECT TRUE AND NULL;    -- NULL
+SELECT FALSE AND NULL;   -- FALSE
+SELECT TRUE OR NULL;     -- TRUE
+SELECT FALSE OR NULL;    -- NULL
+```
+
+### `IS NULL` vs `= NULL`
+
+```sql
+-- WRONG: always returns no rows
+SELECT * FROM users WHERE deleted_at = NULL;
+
+-- CORRECT
+SELECT * FROM users WHERE deleted_at IS NULL;
+SELECT * FROM users WHERE deleted_at IS NOT NULL;
+
+-- IS DISTINCT FROM / IS NOT DISTINCT FROM treat NULL as a comparable value
+SELECT NULL IS DISTINCT FROM NULL;       -- FALSE (they are not distinct)
+SELECT 1 IS DISTINCT FROM NULL;          -- TRUE
+SELECT NULL IS NOT DISTINCT FROM NULL;   -- TRUE
+
+-- Useful for "changed value" detection
+SELECT * FROM audit_log
+WHERE old_value IS DISTINCT FROM new_value;  -- works even if either is NULL
+```
+
+### `COALESCE` — Return the First Non-NULL Value
+
+```sql
+-- COALESCE(a, b, c, ...) returns the first non-NULL argument
+SELECT COALESCE(NULL, NULL, 3, 4);     -- 3
+SELECT COALESCE(display_name, username, email, 'Anonymous') FROM users;
+
+-- Common use: default value substitution
+SELECT id, COALESCE(phone, 'N/A') AS phone FROM contacts;
+
+-- In calculations: prevent NULL propagation
+SELECT COALESCE(price, 0) * COALESCE(quantity, 0) AS line_total FROM order_items;
+
+-- IMPORTANT: COALESCE is short-circuit evaluated; later args are not evaluated
+-- if an earlier arg is non-NULL. Useful for expensive fallbacks.
+SELECT COALESCE(cached_value, expensive_function(id)) FROM items;
+```
+
+### `NULLIF` — Return NULL if Two Values Are Equal
+
+```sql
+-- NULLIF(a, b) returns NULL if a = b, otherwise returns a
+-- This is the inverse of COALESCE
+
+-- Prevent division by zero
+SELECT total_revenue / NULLIF(total_orders, 0) AS avg_order_value FROM metrics;
+
+-- Treat empty string as NULL
+SELECT NULLIF(trim(phone), '') AS phone FROM contacts;
+
+-- Convert sentinel values to NULL
+SELECT NULLIF(status, -1) AS status FROM legacy_jobs;  -- -1 was used for "no status"
+```
+
+### `GREATEST` and `LEAST`
+
+Unlike most aggregate functions, `GREATEST` and `LEAST` are scalar functions that take multiple arguments. They ignore NULLs — but return NULL if ALL arguments are NULL:
+
+```sql
+SELECT GREATEST(3, 1, 4, 1, 5, 9);     -- 9
+SELECT LEAST(3, 1, 4, 1, 5, 9);         -- 1
+
+SELECT GREATEST(NULL, 5, NULL);          -- 5 (ignores NULLs)
+SELECT GREATEST(NULL, NULL, NULL);       -- NULL (all NULL)
+
+-- Clamp a value to a range
+SELECT GREATEST(0, LEAST(score, 100)) AS clamped_score FROM submissions;
+
+-- Use in UPDATE to only increase a counter
+UPDATE products
+SET view_count = GREATEST(view_count, new_count)
+WHERE id = 42;
+```
+
+### NULL in Aggregates
+
+Aggregate functions (`SUM`, `AVG`, `MIN`, `MAX`, `COUNT`) ignore NULLs — except `COUNT(*)` which counts all rows:
+
+```sql
+SELECT
+    COUNT(*)           AS total_rows,       -- counts all rows
+    COUNT(email)       AS rows_with_email,  -- excludes NULL email rows
+    COUNT(DISTINCT email) AS unique_emails, -- excludes NULLs and duplicates
+    SUM(amount)        AS total,            -- NULLs ignored
+    AVG(amount)        AS avg,              -- NULLs ignored (sum/non-null-count)
+    COALESCE(SUM(amount), 0) AS safe_total  -- returns 0 if all amounts are NULL
+FROM payments;
+
+-- AVG can surprise you: avg(1, 2, NULL) = 1.5, not 1.0
+SELECT AVG(val) FROM (VALUES (1), (2), (NULL)) t(val);   -- 1.5
+```
+
+### NULL in ORDER BY
+
+NULL values are treated as larger than any non-NULL value by default in PostgreSQL (i.e., `NULLS LAST` for `ASC`, `NULLS FIRST` for `DESC`):
+
+```sql
+-- Control NULL placement explicitly
+SELECT name, score FROM leaderboard ORDER BY score DESC NULLS LAST;
+SELECT name, created_at FROM tasks ORDER BY created_at ASC NULLS FIRST;
+```
+
+### NULL in UNIQUE Constraints
+
+PostgreSQL follows the SQL standard: NULL is not equal to NULL, so a `UNIQUE` constraint allows multiple NULL values in the same column:
+
+```sql
+CREATE TABLE users (email text UNIQUE);
+
+INSERT INTO users (email) VALUES (NULL);  -- OK
+INSERT INTO users (email) VALUES (NULL);  -- Also OK! NULL != NULL in UNIQUE checks
+INSERT INTO users (email) VALUES ('a@b.com');
+INSERT INTO users (email) VALUES ('a@b.com');  -- ERROR: duplicate key
+
+-- If you want at most one NULL, use a partial unique index:
+CREATE UNIQUE INDEX uq_users_email_not_null ON users (email) WHERE email IS NOT NULL;
+-- Plus a separate check: do not allow more than one row with NULL email
+-- (requires application logic or a partial index trick)
+
+-- PostgreSQL 15+: NULLS NOT DISTINCT
+CREATE TABLE users_pg15 (email text UNIQUE NULLS NOT DISTINCT);
+INSERT INTO users_pg15 VALUES (NULL);
+INSERT INTO users_pg15 VALUES (NULL);  -- ERROR: duplicate key (nulls treated as equal)
+```
+
+### NULL Traps in JOINs and WHERE Clauses
+
+**The NOT IN + NULL trap:**
+```sql
+-- Assume orders.customer_id can be NULL
+-- This returns ZERO rows if any customer_id in orders is NULL:
+SELECT * FROM customers
+WHERE id NOT IN (SELECT customer_id FROM orders);
+
+-- Safe alternatives:
+SELECT * FROM customers c
+WHERE NOT EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.id);
+
+-- Or filter out NULLs explicitly:
+SELECT * FROM customers
+WHERE id NOT IN (SELECT customer_id FROM orders WHERE customer_id IS NOT NULL);
+```
+
+**The LEFT JOIN + WHERE trap:**
+```sql
+-- This looks like a LEFT JOIN but is actually an INNER JOIN
+-- because the WHERE filters out NULLs from the right side:
+SELECT c.name, o.total
+FROM customers c
+LEFT JOIN orders o ON o.customer_id = c.id
+WHERE o.status = 'completed';    -- customers with no orders are excluded!
+
+-- Correct: move the filter into the JOIN condition
+SELECT c.name, o.total
+FROM customers c
+LEFT JOIN orders o ON o.customer_id = c.id AND o.status = 'completed';
+```
+
+### Best Practices
+
+- Always use `IS NULL` / `IS NOT NULL` — never `= NULL` or `!= NULL`.
+- Use `IS DISTINCT FROM` when comparing two values that might both be NULL (e.g., detecting changes in audit triggers).
+- Use `COALESCE` to substitute defaults at the point of use; use `DEFAULT` clause on columns to set database-level defaults.
+- Use `NULLIF` to guard against division by zero and to canonicalize sentinel values to NULL.
+- Avoid `NOT IN` with subqueries that might return NULLs; prefer `NOT EXISTS`.
+- When doing a LEFT JOIN, ensure any WHERE filter on the right table is moved into the ON clause if you want to preserve unmatched left rows.
+- Design schemas so that NULLs are meaningful and intentional — a NULL should mean "unknown" or "not applicable," not "we forgot to fill this in."
+
+---
+
+## 6. Time & Date Types
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -253,7 +892,7 @@ SELECT TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS TZ');  -- formatted string
 
 ---
 
-## 3. Numeric & ID Types
+## 7. Numeric & ID Types
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -357,7 +996,223 @@ Sequential IDs expose information: a competitor can estimate your total record c
 
 ---
 
-## 4. String & Text Types
+## 8. Sequences & Identity Columns
+
+Sequences are PostgreSQL objects that generate unique integer values in order. They are the mechanism behind auto-increment primary keys. Understanding sequences directly — not just the sugar syntax around them — lets you control gaps, reset counters, share sequences across tables, and reason about behavior under concurrency.
+
+### 🌍 When You'll Use This in the Real World
+
+- Every table with an auto-increment primary key uses a sequence under the hood.
+- Generating sequential invoice numbers, order numbers, or ticket IDs that must be gapless (or close to it).
+- Sharing a single counter across multiple tables when all IDs must be globally unique within a system.
+- Resetting or advancing a sequence after a bulk data migration.
+- Diagnosing why your `SERIAL` column is approaching the 2.1 billion integer limit.
+
+### `CREATE SEQUENCE`
+
+```sql
+CREATE SEQUENCE order_number_seq
+    START WITH 1000        -- first value returned
+    INCREMENT BY 1         -- step size (can be negative for descending)
+    MINVALUE 1000          -- lower bound
+    MAXVALUE 9999999       -- upper bound
+    CACHE 10               -- pre-allocate 10 values per session (faster, more gaps)
+    NO CYCLE;              -- raise error when exhausted (default)
+    -- CYCLE would wrap back to MINVALUE
+
+-- Descending sequence
+CREATE SEQUENCE countdown_seq
+    START WITH 100
+    INCREMENT BY -1
+    MINVALUE 1
+    MAXVALUE 100
+    CYCLE;
+```
+
+### Sequence Functions
+
+```sql
+-- Advance and return next value (modifies the sequence)
+SELECT nextval('order_number_seq');   -- 1000, then 1001, etc.
+
+-- Return the last value returned by nextval IN THIS SESSION
+SELECT currval('order_number_seq');   -- ERROR if nextval not yet called
+
+-- Return the last value returned by ANY nextval call in this session
+SELECT lastval();
+
+-- Set the current position (setval does NOT advance; next nextval returns start+increment)
+SELECT setval('order_number_seq', 5000);          -- next nextval → 5001
+SELECT setval('order_number_seq', 5000, false);   -- next nextval → 5000 (is_called=false)
+
+-- Inspect the sequence
+SELECT * FROM order_number_seq;
+-- Or using the catalog:
+SELECT last_value, is_called FROM order_number_seq;
+```
+
+### `SERIAL` / `BIGSERIAL` — Legacy Sugar
+
+`SERIAL` and `BIGSERIAL` are shorthand that create a sequence and attach it to the column. They are still widely used but are considered legacy in PostgreSQL 10+:
+
+```sql
+-- SERIAL expands to:
+CREATE TABLE orders (id SERIAL PRIMARY KEY);
+-- Which is equivalent to:
+CREATE SEQUENCE orders_id_seq;
+CREATE TABLE orders (id integer NOT NULL DEFAULT nextval('orders_id_seq'));
+ALTER SEQUENCE orders_id_seq OWNED BY orders.id;
+
+-- BIGSERIAL uses bigint (recommended over SERIAL)
+CREATE TABLE events (id BIGSERIAL PRIMARY KEY);
+```
+
+**Problems with SERIAL:**
+- It is not SQL-standard.
+- The sequence ownership is implicit and confusing in dumps/restores.
+- `ALTER TABLE ... ADD COLUMN id SERIAL` behaves differently from `IDENTITY`.
+- Permissions on the sequence must be granted separately from the table.
+
+### `GENERATED ... AS IDENTITY` — The Modern Standard
+
+PostgreSQL 10+ supports the SQL-standard `IDENTITY` column syntax. This is the recommended approach for all new tables:
+
+```sql
+-- GENERATED ALWAYS AS IDENTITY
+-- The database always generates the value; you cannot INSERT a manual value
+-- (unless you use OVERRIDING SYSTEM VALUE)
+CREATE TABLE invoices (
+    id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    invoice_no  text NOT NULL,
+    total       numeric(12,2)
+);
+
+INSERT INTO invoices (invoice_no, total) VALUES ('INV-001', 500.00);
+-- id is automatically assigned
+
+-- Override is possible but explicit:
+INSERT INTO invoices (id, invoice_no, total)
+OVERRIDING SYSTEM VALUE
+VALUES (9999, 'INV-MANUAL', 0);
+
+-- GENERATED BY DEFAULT AS IDENTITY
+-- Allows supplying a value manually (behaves more like SERIAL but SQL-standard)
+CREATE TABLE legacy_import (
+    id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    data text
+);
+
+INSERT INTO legacy_import (id, data) VALUES (42, 'migrated row');  -- explicit id OK
+```
+
+### Controlling the Underlying Sequence via IDENTITY
+
+```sql
+-- Access sequence options through the column definition
+CREATE TABLE tickets (
+    id bigint GENERATED ALWAYS AS IDENTITY (
+        START WITH 10000
+        INCREMENT BY 1
+        CACHE 50
+    ) PRIMARY KEY,
+    subject text NOT NULL
+);
+
+-- Alter the sequence of an identity column
+ALTER TABLE tickets ALTER COLUMN id
+    SET GENERATED ALWAYS
+    SET (START WITH 20000, INCREMENT BY 1);
+
+-- Restart the sequence
+ALTER TABLE tickets ALTER COLUMN id RESTART WITH 20000;
+```
+
+### Sequence Gaps — Why They Happen and When to Care
+
+Sequences are designed for **performance, not gaplessness**. Gaps occur because:
+
+1. **Transactions rolled back** — `nextval` is non-transactional; the value is consumed even if the INSERT is rolled back.
+2. **Cache pre-allocation** — with `CACHE N`, each backend pre-allocates N values. If the backend exits without using them all, those values are lost.
+3. **Crashes** — cached sequence values are lost on server restart.
+
+```sql
+-- Demonstrate gap due to rollback
+BEGIN;
+INSERT INTO orders (customer_id) VALUES (1);  -- consumes id=1
+ROLLBACK;
+INSERT INTO orders (customer_id) VALUES (2);  -- gets id=2 (gap at 1)
+
+-- Check for gaps (expensive on large tables)
+SELECT id + 1 AS gap_start
+FROM orders o
+WHERE NOT EXISTS (SELECT 1 FROM orders WHERE id = o.id + 1)
+  AND id < (SELECT max(id) FROM orders)
+ORDER BY id;
+```
+
+**When gaps matter:** Invoice numbers in some jurisdictions must be sequential and gapless for tax compliance. In that case, do not use sequences — use an advisory lock or a separate counter table with a transaction:
+
+```sql
+-- Gapless counter using a dedicated table + row lock
+CREATE TABLE counters (name text PRIMARY KEY, value bigint NOT NULL DEFAULT 0);
+INSERT INTO counters (name) VALUES ('invoice_no');
+
+-- In a transaction:
+BEGIN;
+UPDATE counters SET value = value + 1 WHERE name = 'invoice_no';
+SELECT value FROM counters WHERE name = 'invoice_no';  -- use this as the invoice number
+INSERT INTO invoices (...) VALUES (...);
+COMMIT;
+```
+
+### Sharing a Sequence Across Multiple Tables
+
+```sql
+CREATE SEQUENCE global_entity_id_seq START WITH 1;
+
+CREATE TABLE customers (
+    id      bigint DEFAULT nextval('global_entity_id_seq') PRIMARY KEY,
+    name    text
+);
+
+CREATE TABLE vendors (
+    id      bigint DEFAULT nextval('global_entity_id_seq') PRIMARY KEY,
+    name    text
+);
+
+-- IDs are now globally unique across both tables
+```
+
+### Inspecting Sequences
+
+```sql
+-- All sequences in the current database
+SELECT schemaname, sequencename, start_value, min_value, max_value,
+       increment_by, cycle, cache_size, last_value
+FROM pg_sequences
+WHERE schemaname = 'public';
+
+-- Find sequences approaching their maximum
+SELECT sequencename,
+       last_value,
+       max_value,
+       round(100.0 * last_value / max_value, 2) AS pct_used
+FROM pg_sequences
+WHERE schemaname = 'public'
+ORDER BY pct_used DESC;
+```
+
+### Best Practices
+
+- Always use `bigint GENERATED ALWAYS AS IDENTITY` for new tables. Never use `SERIAL` (32-bit, legacy) or plain `SERIAL` which maxes at ~2.1 billion.
+- Set `CACHE 1` on sequences that must minimize gaps; accept higher `CACHE` values for high-throughput tables that can tolerate gaps.
+- Monitor sequence usage percentage (`pg_sequences.last_value / max_value`) — a sequence hitting its max causes INSERT failures.
+- Do not use sequences for gapless business numbers (invoice IDs, receipt numbers). Use a locked counter table instead.
+- After bulk data migrations, always call `setval` or `ALTER ... RESTART WITH` so the next generated value does not collide with imported data.
+
+---
+
+## 9. String & Text Types
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -432,7 +1287,697 @@ CREATE COLLATION case_insensitive (provider = icu, locale = 'und-u-ks-level2', d
 
 ---
 
-## 5. JSON Types
+## 10. Character Sets, Collations & Encoding
+
+Every PostgreSQL database is created with an **encoding** (how characters are stored as bytes) and a **default collation** (how strings are sorted and compared). These settings affect index types, sort order, case-sensitivity, and compatibility with client applications. Getting them wrong at creation time is painful to fix later.
+
+### 🌍 When You'll Use This in the Real World
+
+- Internationalizing an application that stores names, addresses, or content in multiple languages.
+- Building case-insensitive login or search features where `user@EXAMPLE.COM` must match `user@example.com`.
+- Diagnosing why a query using `LIKE 'abc%'` stopped using an index after a database migration.
+- Dealing with corrupted text after a client application connected in Latin-1 to a UTF-8 database.
+- Implementing locale-aware sorting where `ä` should sort near `a` in German but after `z` in traditional Swedish.
+
+### Database Encoding
+
+The encoding is set at `CREATE DATABASE` time and cannot be changed without a dump-and-restore:
+
+```sql
+-- Create a UTF-8 database (strongly recommended for all new databases)
+CREATE DATABASE myapp
+    ENCODING = 'UTF8'
+    LC_COLLATE = 'en_US.UTF-8'
+    LC_CTYPE = 'en_US.UTF-8'
+    TEMPLATE = template0;   -- template0 required when specifying non-default locale
+
+-- Check the encoding of the current database
+SHOW server_encoding;
+SELECT pg_encoding_to_char(encoding), datcollate, datctype
+FROM pg_database WHERE datname = current_database();
+```
+
+| Encoding | Notes |
+|----------|-------|
+| `UTF8` | Universal. Store any language. Only correct choice for new databases. |
+| `SQL_ASCII` | Dangerous: no encoding enforcement; bytes pass through unchanged. Use only for pure ASCII data where you control all clients. |
+| `LATIN1` (ISO-8859-1) | Western European legacy. Cannot store CJK, Arabic, etc. |
+| `WIN1252` | Windows Western European legacy. Common in migrated databases. |
+
+### The `COLLATE` Clause
+
+A collation defines the rules for string comparison (`=`, `<`, `>`, `LIKE`, `ORDER BY`). It can be specified at three levels:
+
+```sql
+-- 1. Column level
+CREATE TABLE users (
+    name text COLLATE "en_US.UTF-8"
+);
+
+-- 2. Expression level (overrides column collation for that expression only)
+SELECT * FROM users ORDER BY name COLLATE "C";
+
+-- 3. Index level (index can only be used by queries with matching collation)
+CREATE INDEX idx_users_name_ci ON users (name COLLATE "und-x-icu");
+```
+
+### Case-Insensitive Collations with ICU
+
+PostgreSQL 12+ supports ICU (International Components for Unicode) collations, which enable true locale-aware case-insensitive and accent-insensitive comparisons:
+
+```sql
+-- Create a case-insensitive collation using ICU (PostgreSQL 12+)
+CREATE COLLATION case_insensitive (
+    provider = icu,
+    locale = 'und-x-icu',        -- 'und' = undetermined locale (language-agnostic)
+    deterministic = false         -- required for case-insensitive behavior
+);
+
+-- Use it on a column
+CREATE TABLE accounts (
+    email text COLLATE case_insensitive UNIQUE
+);
+
+-- Now these are considered equal:
+INSERT INTO accounts (email) VALUES ('Alice@Example.COM');
+INSERT INTO accounts (email) VALUES ('alice@example.com');  -- ERROR: duplicate key!
+
+-- And this index is used by case-insensitive comparisons:
+CREATE INDEX idx_accounts_email ON accounts (email);  -- inherits column collation
+SELECT * FROM accounts WHERE email = 'ALICE@EXAMPLE.COM';  -- uses the index
+```
+
+**Before ICU collations**, the canonical workaround was `citext` extension or functional indexes:
+```sql
+-- Legacy approach: functional index on lower()
+CREATE INDEX idx_users_email_lower ON users (lower(email));
+SELECT * FROM users WHERE lower(email) = lower('Alice@Example.COM');
+
+-- Or use the citext extension
+CREATE EXTENSION citext;
+CREATE TABLE users (email citext UNIQUE);
+```
+
+### Accent-Insensitive Collations
+
+```sql
+-- Accent-insensitive AND case-insensitive
+CREATE COLLATION accent_insensitive (
+    provider = icu,
+    locale = 'und-u-ks-level1',  -- level1 ignores case AND accents
+    deterministic = false
+);
+
+CREATE TABLE products (name text COLLATE accent_insensitive);
+-- Now 'cafe' matches 'café' and 'CAFÉ'
+```
+
+### The `C` and `POSIX` Collations
+
+`C` (or `POSIX`) is a special collation that compares strings byte-by-byte. It is the fastest collation and the only one that supports the B-tree index optimization for `LIKE 'prefix%'` patterns without the `pg_trgm` extension:
+
+```sql
+-- LIKE prefix search only uses a B-tree index when collation is C
+CREATE INDEX idx_users_name_c ON users (name COLLATE "C");
+SELECT * FROM users WHERE name LIKE 'John%' COLLATE "C";
+
+-- With a locale-aware collation, you need a trigram index for LIKE
+CREATE EXTENSION pg_trgm;
+CREATE INDEX idx_users_name_trgm ON users USING gin (name gin_trgm_ops);
+SELECT * FROM users WHERE name LIKE '%John%';
+```
+
+### Inspecting Collations
+
+```sql
+-- List all available collations
+SELECT collname, collprovider, collisdeterministic, colllocale
+FROM pg_collation
+ORDER BY collname;
+
+-- Find collations for a specific locale
+SELECT collname FROM pg_collation WHERE collname LIKE '%en_US%';
+
+-- Check collation of a specific column
+SELECT column_name, collation_name
+FROM information_schema.columns
+WHERE table_name = 'users';
+```
+
+### Common Encoding Pitfalls
+
+**Mismatch between client and server encoding:**
+```sql
+-- Check client encoding
+SHOW client_encoding;
+
+-- Set client encoding for the session
+SET client_encoding = 'UTF8';
+
+-- Or in connection string
+psql "dbname=myapp client_encoding=UTF8"
+```
+
+**Cannot store certain characters:**
+```sql
+-- In a LATIN1 database, this fails:
+INSERT INTO messages (body) VALUES ('Hello 🌍');   -- emoji is outside Latin-1
+
+-- Solution: Only use UTF-8 databases for new projects.
+```
+
+**`LIKE` index not used after locale change:**
+A B-tree index built with locale `en_US.UTF-8` will NOT support `LIKE 'prefix%'` scans. If you need prefix LIKE scanning with a locale collation, use a trigram index or switch the column to `COLLATE "C"`.
+
+### Best Practices
+
+- Always create databases with `ENCODING = 'UTF8'`. There is no good reason to use anything else for new databases in 2024.
+- Use ICU collations (`deterministic = false`) for case-insensitive columns in PostgreSQL 12+. They are more correct than `citext` and support proper Unicode folding.
+- Use `COLLATE "C"` on columns where you need fast prefix `LIKE` scans and do not need locale-aware sorting.
+- Store the collation choice in your migration scripts so it is reproducible across environments.
+- Never mix encodings in a replication setup.
+
+---
+
+## 11. Casting & Type Conversion
+
+PostgreSQL is a strongly typed database — every value has a declared type, and operations between mismatched types require an explicit or implicit conversion. Understanding the casting system lets you write correct, predictable SQL and avoid subtle runtime errors and silent precision loss.
+
+### 🌍 When You'll Use This in the Real World
+
+- Reading data from `TEXT` columns in legacy schemas and converting to numeric or date types for calculations.
+- Handling JSON fields where values arrive as `text` but need to be treated as `integer`, `boolean`, or `timestamptz`.
+- Writing generic utility functions that accept `anyelement` and need to cast internally.
+- Debugging "operator does not exist" errors where PostgreSQL refuses an implicit cast.
+- Building reporting queries that format numbers, dates, or enums as displayable strings.
+
+### Implicit vs Explicit Casting
+
+PostgreSQL attempts **implicit casts** automatically when the source and target types have a defined implicit cast path in the system catalog. If none exists, the query fails unless you add an explicit cast.
+
+```sql
+-- Implicit: integer literal assigned to bigint column — fine
+INSERT INTO orders (quantity) VALUES (42);
+
+-- Implicit: integer → numeric in arithmetic — fine
+SELECT 10 / 3.0;   -- 3.3333...
+
+-- NO implicit cast from text → integer in expressions
+SELECT '42' + 1;   -- ERROR: operator does not exist: text + integer
+
+-- Explicit cast required
+SELECT '42'::integer + 1;   -- 43
+SELECT CAST('42' AS integer) + 1;   -- 43 (SQL-standard syntax)
+```
+
+PostgreSQL defines three cast contexts in `pg_cast.castcontext`:
+| Context | Symbol | Meaning |
+|---------|--------|---------|
+| `i` | implicit | Applied automatically by the planner anywhere |
+| `a` | assignment | Applied automatically on INSERT/UPDATE to match column type |
+| `e` | explicit | Only applied when the cast is written by the user |
+
+### `CAST(x AS type)` and `x::type` Syntax
+
+Both are functionally identical. `::` is PostgreSQL-specific and more concise; `CAST()` is SQL-standard and preferred in portable code.
+
+```sql
+-- Equivalent forms
+SELECT CAST('2024-01-15' AS date);
+SELECT '2024-01-15'::date;
+
+-- Chaining casts
+SELECT '3.14'::text::numeric::integer;   -- 3
+
+-- Casting in column definitions / expressions
+SELECT price::numeric(10,2) FROM products;
+
+-- Casting NULL
+SELECT NULL::integer;   -- NULL of type integer
+```
+
+### Common Cast Pitfalls
+
+**`text` → `integer` — truncation vs error**
+```sql
+SELECT '42abc'::integer;   -- ERROR: invalid input syntax
+SELECT '42.9'::integer;    -- ERROR: use numeric first, then cast
+SELECT '42.9'::numeric::integer;   -- 43  (rounds)
+SELECT trunc('42.9'::numeric)::integer;   -- 42 (truncates)
+```
+
+**`timestamp` → `date` — timezone trap**
+```sql
+-- timestamptz → date uses the SESSION timezone
+SET timezone = 'UTC';
+SELECT '2024-01-15 23:00:00+00'::timestamptz::date;   -- 2024-01-15
+
+SET timezone = 'America/New_York';
+SELECT '2024-01-15 23:00:00+00'::timestamptz::date;   -- 2024-01-15
+-- But at 2024-01-15 02:00:00 UTC with New York offset it would be 2024-01-14!
+
+-- Always cast through AT TIME ZONE when the timezone matters
+SELECT ('2024-01-15 23:00:00+00'::timestamptz AT TIME ZONE 'UTC')::date;
+```
+
+**`float` → `numeric` — precision loss**
+```sql
+SELECT 0.1::float8::numeric;
+-- 0.1000000000000000055511151231257827021181583404541015625
+-- Floats cannot represent 0.1 exactly; casting to numeric preserves the binary imprecision.
+
+-- Correct pattern: round explicitly
+SELECT round(0.1::float8::numeric, 2);   -- 0.10
+```
+
+**`integer` division — no automatic promotion**
+```sql
+SELECT 7 / 2;          -- 3   (integer division, truncates)
+SELECT 7 / 2.0;        -- 3.5 (one operand is numeric)
+SELECT 7::numeric / 2; -- 3.5
+```
+
+**`boolean` text representation**
+```sql
+SELECT 'true'::boolean;    -- t
+SELECT 'yes'::boolean;     -- t
+SELECT '1'::boolean;       -- t
+SELECT 'on'::boolean;      -- t
+SELECT 'false'::boolean;   -- f
+SELECT 'off'::boolean;     -- f
+-- All of the above are valid boolean text literals in PostgreSQL
+```
+
+### Custom Cast Functions
+
+You can define your own casts between user-defined types or between built-in types where no system cast exists.
+
+```sql
+-- 1. Create a domain or composite type
+CREATE DOMAIN us_zip AS text CHECK (VALUE ~ '^\d{5}(-\d{4})?$');
+
+-- 2. Create a function that performs the conversion
+CREATE FUNCTION text_to_us_zip(text) RETURNS us_zip
+  LANGUAGE sql STRICT IMMUTABLE AS
+$$SELECT $1::us_zip$$;
+
+-- 3. Register the cast
+CREATE CAST (text AS us_zip)
+  WITH FUNCTION text_to_us_zip(text)
+  AS ASSIGNMENT;   -- applies automatically on INSERT/UPDATE
+
+-- Now this works without explicit cast:
+INSERT INTO addresses (zip) VALUES ('94107');
+```
+
+### Inspecting the `pg_cast` Catalog
+
+```sql
+-- List all casts from a given source type
+SELECT
+    t1.typname AS source_type,
+    t2.typname AS target_type,
+    c.castcontext,
+    p.proname AS cast_function
+FROM pg_cast c
+JOIN pg_type t1 ON t1.oid = c.castsource
+JOIN pg_type t2 ON t2.oid = c.casttarget
+LEFT JOIN pg_proc p ON p.oid = c.castfunc
+WHERE t1.typname = 'text'
+ORDER BY t2.typname;
+
+-- Find implicit casts that the planner can use automatically
+SELECT t1.typname AS from_type, t2.typname AS to_type
+FROM pg_cast c
+JOIN pg_type t1 ON t1.oid = c.castsource
+JOIN pg_type t2 ON t2.oid = c.casttarget
+WHERE c.castcontext = 'i'
+ORDER BY 1, 2;
+```
+
+### Format Functions as an Alternative to Casting
+
+For display purposes, `to_char()`, `to_number()`, and `to_date()` are often cleaner than raw casts because they accept format strings:
+
+```sql
+SELECT to_char(now(), 'YYYY-MM-DD HH24:MI:SS TZ');
+SELECT to_char(1234567.89, 'FM$999,999,999.00');
+SELECT to_number('1,234.56', '9,999.99');
+SELECT to_date('15 Jan 2024', 'DD Mon YYYY');
+```
+
+### Best Practices
+
+- Prefer `x::type` for concise PostgreSQL code; use `CAST(x AS type)` in SQL you need to port.
+- Never rely on implicit text→integer casts in application queries — be explicit to catch bad data early.
+- Cast `timestamptz` to `date` only after applying the correct timezone with `AT TIME ZONE`.
+- Avoid `float` for anything where you later need exact `numeric` comparisons.
+- Register custom casts as `ASSIGNMENT` (not `IMPLICIT`) unless you are certain the automatic conversion will never produce surprising results.
+
+---
+
+## 12. Binary Data & Bit Strings
+
+PostgreSQL provides two distinct systems for raw binary data: `bytea` for opaque byte sequences (file contents, hashes, encrypted blobs) and `bit`/`bit varying` for fixed or variable-length sequences of binary digits used in flag manipulation and bitmasking.
+
+### 🌍 When You'll Use This in the Real World
+
+- Storing file checksums (MD5, SHA-256) as raw bytes rather than hex strings to save space and enable byte-level comparisons.
+- Keeping small binary blobs (thumbnails, certificates, keys) in the database alongside their metadata.
+- Using bitmask columns to represent a compact set of boolean flags (user permissions, feature toggles) without a separate join table.
+- Storing opaque tokens, encrypted payloads, or serialized binary protocol data.
+- Recording MAC addresses, IP prefix bitmasks, or hardware fingerprints in their native binary form.
+
+### The `bytea` Type
+
+`bytea` stores an arbitrary sequence of bytes with no encoding interpretation. There is no length limit (up to 1 GB per value).
+
+```sql
+CREATE TABLE files (
+    id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    filename    text NOT NULL,
+    content     bytea,
+    sha256_hash bytea,
+    created_at  timestamptz DEFAULT now()
+);
+
+-- Insert using hex escape literals (PostgreSQL-specific)
+INSERT INTO files (filename, sha256_hash)
+VALUES ('report.pdf', '\xdeadbeef01020304');
+
+-- Insert using the standard escape syntax
+INSERT INTO files (filename, content)
+VALUES ('hello.txt', E'\\x48656c6c6f');   -- "Hello" in hex
+
+-- Using encode/decode
+SELECT encode(sha256_hash, 'hex') FROM files;     -- output as hex string
+SELECT encode(sha256_hash, 'base64') FROM files;  -- output as base64
+SELECT decode('deadbeef', 'hex');                  -- hex string → bytea
+SELECT decode('SGVsbG8=', 'base64');               -- base64 → bytea
+```
+
+### `bytea_output` Setting
+
+Controls how `bytea` values are displayed when sent to clients:
+
+```sql
+-- PostgreSQL default since 9.0: hex format
+SET bytea_output = 'hex';
+SELECT '\x48656c6c6f'::bytea;   -- \x48656c6c6f
+
+-- Legacy escape format (used by older clients)
+SET bytea_output = 'escape';
+SELECT '\x48656c6c6f'::bytea;   -- Hello
+```
+
+Always use the `hex` format (the default) for new applications. The `escape` format is difficult to parse correctly and is retained for backward compatibility only.
+
+### Hashing and Checksums with `bytea`
+
+```sql
+-- Compute SHA-256 hash (requires pgcrypto extension)
+CREATE EXTENSION pgcrypto;
+
+UPDATE files
+SET sha256_hash = digest(content, 'sha256')
+WHERE content IS NOT NULL;
+
+-- Verify integrity
+SELECT filename,
+       sha256_hash = digest(content, 'sha256') AS integrity_ok
+FROM files;
+
+-- Store MD5 as bytea (16 bytes, more compact than 32-char hex string)
+SELECT decode(md5('hello world'), 'hex')::bytea;
+```
+
+### Bit String Types: `bit(n)` and `bit varying(n)`
+
+`bit(n)` is a fixed-length string of exactly `n` binary digits (0 or 1). `bit varying(n)` (alias `varbit(n)`) allows up to `n` bits.
+
+```sql
+-- Fixed-length: must supply exactly n bits
+CREATE TABLE permissions (
+    role_id   bigint PRIMARY KEY,
+    flags     bit(8) NOT NULL DEFAULT B'00000000'
+);
+
+-- Variable-length
+CREATE TABLE feature_flags (
+    user_id   bigint PRIMARY KEY,
+    flags     bit varying(64) NOT NULL DEFAULT B''
+);
+
+-- Insert literal bit strings
+INSERT INTO permissions (role_id, flags) VALUES (1, B'10110100');
+INSERT INTO permissions (role_id, flags) VALUES (2, '10110100');  -- text also works
+
+-- Hex notation
+INSERT INTO permissions (role_id, flags) VALUES (3, X'B4');  -- 10110100
+```
+
+### Bitwise Operations
+
+```sql
+-- AND, OR, XOR, NOT, shift
+SELECT B'10110100' & B'11110000';   -- 10110000  (AND)
+SELECT B'10110100' | B'00001111';   -- 10111111  (OR)
+SELECT B'10110100' # B'11110000';   -- 01000100  (XOR)
+SELECT ~B'10110100';                -- 01001011  (NOT)
+SELECT B'10110100' << 2;            -- 11010000  (left shift)
+SELECT B'10110100' >> 2;            -- 00101101  (right shift)
+
+-- Extract a single bit (1-indexed from the left)
+SELECT get_bit(B'10110100', 0);     -- 1 (leftmost bit)
+SELECT get_bit(B'10110100', 3);     -- 1
+
+-- Set a bit
+SELECT set_bit(B'10110100', 7, 1);  -- 10110101 (set rightmost bit)
+
+-- Count set bits (popcount — useful for permission counting)
+SELECT length(replace(B'10110100'::text, '0', ''));  -- 4 bits set
+```
+
+### Practical Bitmask Pattern: Permission Flags
+
+```sql
+-- Define constants as named values (use application layer or SQL functions)
+-- Bit positions: 0=READ, 1=WRITE, 2=DELETE, 3=ADMIN
+
+CREATE TABLE role_permissions (
+    role_id  bigint PRIMARY KEY,
+    perms    bit(8) NOT NULL DEFAULT B'00000000'
+);
+
+-- Grant READ (bit 0) and WRITE (bit 1)
+UPDATE role_permissions
+SET perms = set_bit(set_bit(perms, 0, 1), 1, 1)
+WHERE role_id = 42;
+
+-- Check if WRITE permission (bit 1) is set
+SELECT role_id
+FROM role_permissions
+WHERE get_bit(perms, 1) = 1;
+
+-- Find roles with ADMIN (bit 3) set
+SELECT role_id
+FROM role_permissions
+WHERE (perms & B'00001000') != B'00000000';
+```
+
+### Comparison with `integer` Bitmasks
+
+Many developers use `integer` or `bigint` for bitmasks because the syntax is more familiar. Both approaches work; the choice comes down to readability:
+
+```sql
+-- Integer bitmask approach
+SELECT 0b10110100::integer;   -- 180
+SELECT 180 & 240;             -- bitwise AND on integers
+SELECT (perms & 8) != 0;      -- check ADMIN bit
+
+-- bit(n) approach is more self-documenting
+SELECT (perms & B'00001000') != B'00000000';
+```
+
+For most production use cases, `integer` or `bigint` bitmasks are more practical because they integrate naturally with application ORMs and languages. Use `bit(n)` when the bit-string nature of the data matters intrinsically (e.g., hardware register values, protocol frames).
+
+### Best Practices
+
+- Use `bytea` for all opaque binary data (file bytes, hashes, encrypted payloads). Do not store binary data as hex strings in `text` columns.
+- Always keep `bytea_output = 'hex'` (the default). Only set `escape` if you have a legacy client that requires it.
+- For permission flags in typical web applications, `integer` bitmasks are fine and simpler. Use `bit(n)` when the domain genuinely calls for fixed-width bit patterns.
+- Index `bytea` columns used in equality lookups with a standard B-tree index — it works because `bytea` supports equality comparison.
+- Never store large files (>1 MB) in `bytea` columns in the main table. Store them in object storage and keep only the URL and hash in the database.
+
+---
+
+## 13. Network & MAC Address Types
+
+PostgreSQL has first-class support for network address types: `inet`, `cidr`, `macaddr`, and `macaddr8`. These types store addresses in their native form, enable subnet arithmetic and containment operators, and support GiST-based indexing for range and containment queries — things that would require complex string parsing with `text` columns.
+
+### 🌍 When You'll Use This in the Real World
+
+- Building IP allowlists or blocklists where you need to check whether a client IP falls within a given CIDR range.
+- Storing device MAC addresses for network inventory, IoT device registries, or access control lists.
+- Implementing network topology tables that track subnet assignments, IP allocations, and gateway relationships.
+- Auditing tables that record `client_ip inet` for every request, then querying by subnet for incident analysis.
+- Firewall rule management systems where rules contain source/destination CIDR prefixes.
+
+### The `inet` and `cidr` Types
+
+| Type | Stores | Example | Notes |
+|------|--------|---------|-------|
+| `inet` | A host address with optional subnet mask | `192.168.1.5/24` | The host bits beyond the mask are preserved |
+| `cidr` | A network address | `192.168.1.0/24` | Host bits beyond mask must be zero |
+
+```sql
+-- inet: stores host address with optional prefix length
+SELECT '192.168.1.5'::inet;          -- 192.168.1.5
+SELECT '192.168.1.5/24'::inet;       -- 192.168.1.5/24
+SELECT '::1'::inet;                   -- IPv6 loopback
+SELECT '2001:db8::1/64'::inet;       -- IPv6 with prefix
+
+-- cidr: network address; host bits must be zero
+SELECT '192.168.1.0/24'::cidr;       -- 192.168.1.0/24
+SELECT '192.168.1.5/24'::cidr;       -- ERROR: invalid cidr value
+-- PostgreSQL will silently zero the host bits on some versions; safer to be explicit
+
+-- Convert inet to cidr (zero out host bits)
+SELECT network('192.168.1.5/24'::inet)::cidr;   -- 192.168.1.0/24
+```
+
+### Network Functions and Operators
+
+```sql
+-- Containment operators (the most important ones)
+SELECT '192.168.1.5'::inet << '192.168.1.0/24'::cidr;    -- true: host is IN subnet
+SELECT '10.0.0.1'::inet << '192.168.1.0/24'::cidr;       -- false
+SELECT '192.168.1.0/24'::cidr <<= '192.168.0.0/16'::cidr; -- true: subnet is within supernet
+SELECT '192.168.0.0/16'::cidr >>= '192.168.1.0/24'::cidr; -- true: supernet contains subnet
+
+-- Overlap
+SELECT '192.168.1.0/24'::cidr && '192.168.1.128/25'::cidr; -- true
+
+-- Address functions
+SELECT host('192.168.1.5/24'::inet);         -- '192.168.1.5' (strip mask)
+SELECT masklen('192.168.1.5/24'::inet);      -- 24
+SELECT netmask('192.168.1.5/24'::inet);      -- '255.255.255.0'
+SELECT network('192.168.1.5/24'::inet);      -- '192.168.1.0/24'
+SELECT broadcast('192.168.1.0/24'::inet);    -- '192.168.1.255/24'
+SELECT abbrev('192.168.1.0/24'::cidr);       -- '192.168.1/24'
+SELECT family('192.168.1.1'::inet);          -- 4 (IPv4); 6 for IPv6
+
+-- Arithmetic
+SELECT '192.168.1.5'::inet + 3;      -- 192.168.1.8
+SELECT '192.168.1.10'::inet - 2;     -- 192.168.1.8
+SELECT '192.168.1.10'::inet - '192.168.1.1'::inet;  -- 9 (difference)
+```
+
+### Real-World: IP Allowlist Check
+
+```sql
+CREATE TABLE ip_allowlist (
+    id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    label       text NOT NULL,
+    network     cidr NOT NULL,
+    created_at  timestamptz DEFAULT now()
+);
+
+CREATE INDEX idx_ip_allowlist_network ON ip_allowlist USING gist (network inet_ops);
+
+-- Check whether a client IP is in any allowed network
+SELECT EXISTS (
+    SELECT 1 FROM ip_allowlist
+    WHERE network >> '203.0.113.42'::inet   -- network contains host
+) AS is_allowed;
+
+-- Which networks match a given IP?
+SELECT label, network
+FROM ip_allowlist
+WHERE network >>= '10.0.1.0/24'::cidr  -- find supernets
+   OR network <<= '10.0.1.0/24'::cidr; -- find subnets
+```
+
+### Indexing Network Types with GiST
+
+A standard B-tree index on `inet`/`cidr` supports equality and ordering but NOT containment operators (`<<`, `>>`). For containment queries, use a GiST index with the `inet_ops` operator class:
+
+```sql
+-- GiST index for containment queries
+CREATE INDEX idx_allowlist_gist ON ip_allowlist USING gist (network inet_ops);
+
+-- B-tree index still useful for equality lookups
+CREATE INDEX idx_audit_client_ip ON audit_log (client_ip);
+```
+
+### The `macaddr` and `macaddr8` Types
+
+`macaddr` stores a 6-byte (EUI-48) MAC address. `macaddr8` stores an 8-byte (EUI-64) MAC address (used by modern network interfaces and IPv6).
+
+```sql
+-- Various accepted input formats for macaddr
+SELECT '08:00:2b:01:02:03'::macaddr;
+SELECT '08-00-2b-01-02-03'::macaddr;
+SELECT '08002b010203'::macaddr;
+SELECT '08002b:010203'::macaddr;
+
+-- macaddr8 (EUI-64)
+SELECT '08:00:2b:ff:fe:01:02:03'::macaddr8;
+
+-- Convert macaddr to macaddr8 (inserts ff:fe in the middle)
+SELECT macaddr8(('08:00:2b:01:02:03'::macaddr));
+
+-- Truncate to manufacturer prefix (OUI — first 3 bytes)
+SELECT trunc('08:00:2b:01:02:03'::macaddr);   -- 08:00:2b:00:00:00
+```
+
+### Real-World: Device Registry
+
+```sql
+CREATE TABLE devices (
+    id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    mac_address macaddr NOT NULL UNIQUE,
+    hostname    text,
+    last_seen   timestamptz,
+    client_ip   inet
+);
+
+CREATE INDEX idx_devices_mac ON devices (mac_address);
+CREATE INDEX idx_devices_ip  ON devices (client_ip);
+
+-- Find all devices from the same manufacturer (same OUI prefix)
+SELECT * FROM devices
+WHERE trunc(mac_address) = trunc('08:00:2b:01:02:03'::macaddr);
+
+-- Devices in a specific subnet
+SELECT * FROM devices
+WHERE client_ip << '10.10.0.0/16'::cidr;
+```
+
+### Operator Summary
+
+| Operator | Meaning | Types |
+|----------|---------|-------|
+| `<<` | Address is contained in network | `inet << cidr` |
+| `>>` | Network contains address | `cidr >> inet` |
+| `<<=` | Address/network is contained in or equals | `cidr <<= cidr` |
+| `>>=` | Network contains or equals | `cidr >>= cidr` |
+| `&&` | Networks overlap | `cidr && cidr` |
+| `~` | Bitwise NOT | `inet` |
+| `&` | Bitwise AND | `inet & inet` |
+| `\|` | Bitwise OR | `inet \| inet` |
+
+### Best Practices
+
+- Use `inet` for client IP addresses in audit and session tables (preserves the exact host address).
+- Use `cidr` for firewall rules, allowlists, and subnet definitions (enforces that host bits are zero).
+- Always create a GiST index (`inet_ops`) on network columns used in containment queries.
+- Prefer `macaddr` over storing MAC addresses as `text` — you get automatic format normalization, equality comparisons, and manufacturer prefix truncation for free.
+- When storing both IPv4 and IPv6 addresses, use `inet` — it handles both families transparently.
+
+---
+
+## 14. JSON Types
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -536,7 +2081,7 @@ CREATE INDEX idx_events_payload_path ON events USING GIN (payload jsonb_path_ops
 
 ---
 
-## 6. Arrays
+## 15. Arrays
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -609,7 +2154,7 @@ CREATE INDEX idx_posts_tags ON posts USING GIN(tags);
 
 ---
 
-## 7. Range Types
+## 16. Range Types
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -670,7 +2215,7 @@ WHERE product_id = 42 AND effective @> CURRENT_DATE;
 
 ---
 
-## 8. Generated Columns
+## 17. Generated Columns
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -708,7 +2253,70 @@ CREATE TABLE contacts (
 
 ---
 
-## 9. Full-Text Search
+## 18. Composite & Enum Types
+
+### 🌍 When You'll Use This in the Real World
+
+- **Order status workflows**: Define `ENUM('pending', 'processing', 'shipped', 'delivered', 'cancelled')` so invalid statuses like `'shippd'` are rejected at the database level.
+- **Address fields**: Group street, city, state, zip into a composite type when you always read/write the full address together and don't need to query individual fields.
+- **Ticket priority systems**: Enums enforce ordering — `'critical' > 'high' > 'medium' > 'low'` — enabling queries like "show all tickets above medium priority."
+- **Lookup tables vs. enums**: If your list of values changes frequently (e.g., product categories that marketing updates monthly), use a lookup table with a foreign key instead of an enum.
+
+### Composite Types
+
+A custom type grouping multiple fields:
+
+```sql
+CREATE TYPE address AS (
+  street TEXT,
+  city   TEXT,
+  state  TEXT,
+  zip    TEXT
+);
+
+CREATE TABLE users (
+  id   BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  name TEXT NOT NULL,
+  home address
+);
+
+-- Insert
+INSERT INTO users (name, home)
+VALUES ('Alice', ROW('123 Main St', 'Colombo', 'WP', '10100'));
+
+-- Query specific fields
+SELECT (home).city, (home).zip FROM users;
+
+-- Update a single field within the composite
+UPDATE users SET home.zip = '10200' WHERE id = 1;
+```
+
+> ⚠️ **Composite types have limitations:** They cannot have constraints, defaults, or indexes on individual fields. For complex structures, a separate normalized table is usually better.
+
+### Enum Types
+
+Enums define a static, ordered set of values:
+
+```sql
+CREATE TYPE order_status AS ENUM ('pending', 'processing', 'shipped', 'delivered', 'cancelled');
+
+CREATE TABLE orders (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  status order_status NOT NULL DEFAULT 'pending'
+);
+
+-- Comparison uses the declared order
+SELECT * FROM orders WHERE status > 'processing';  -- shipped, delivered, cancelled
+
+-- Add a new value (PostgreSQL 9.1+)
+ALTER TYPE order_status ADD VALUE 'returned' AFTER 'delivered';
+```
+
+> ⚠️ **Enum trade-offs:** You cannot remove values or reorder them without recreating the type. For frequently changing lists, a lookup table with a foreign key is more flexible.
+
+---
+
+## 19. Full-Text Search
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -806,70 +2414,7 @@ SELECT * FROM products WHERE name ILIKE '%search%';  -- now uses the GIN index
 
 ---
 
-## 10. Composite & Enum Types
-
-### 🌍 When You'll Use This in the Real World
-
-- **Order status workflows**: Define `ENUM('pending', 'processing', 'shipped', 'delivered', 'cancelled')` so invalid statuses like `'shippd'` are rejected at the database level.
-- **Address fields**: Group street, city, state, zip into a composite type when you always read/write the full address together and don't need to query individual fields.
-- **Ticket priority systems**: Enums enforce ordering — `'critical' > 'high' > 'medium' > 'low'` — enabling queries like "show all tickets above medium priority."
-- **Lookup tables vs. enums**: If your list of values changes frequently (e.g., product categories that marketing updates monthly), use a lookup table with a foreign key instead of an enum.
-
-### Composite Types
-
-A custom type grouping multiple fields:
-
-```sql
-CREATE TYPE address AS (
-  street TEXT,
-  city   TEXT,
-  state  TEXT,
-  zip    TEXT
-);
-
-CREATE TABLE users (
-  id   BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  name TEXT NOT NULL,
-  home address
-);
-
--- Insert
-INSERT INTO users (name, home)
-VALUES ('Alice', ROW('123 Main St', 'Colombo', 'WP', '10100'));
-
--- Query specific fields
-SELECT (home).city, (home).zip FROM users;
-
--- Update a single field within the composite
-UPDATE users SET home.zip = '10200' WHERE id = 1;
-```
-
-> ⚠️ **Composite types have limitations:** They cannot have constraints, defaults, or indexes on individual fields. For complex structures, a separate normalized table is usually better.
-
-### Enum Types
-
-Enums define a static, ordered set of values:
-
-```sql
-CREATE TYPE order_status AS ENUM ('pending', 'processing', 'shipped', 'delivered', 'cancelled');
-
-CREATE TABLE orders (
-  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  status order_status NOT NULL DEFAULT 'pending'
-);
-
--- Comparison uses the declared order
-SELECT * FROM orders WHERE status > 'processing';  -- shipped, delivered, cancelled
-
--- Add a new value (PostgreSQL 9.1+)
-ALTER TYPE order_status ADD VALUE 'returned' AFTER 'delivered';
-```
-
-> ⚠️ **Enum trade-offs:** You cannot remove values or reorder them without recreating the type. For frequently changing lists, a lookup table with a foreign key is more flexible.
-
----
-
-## 11. Indexes — Theory & Practice
+## 20. Indexes — Theory & Practice
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -1050,7 +2595,7 @@ ORDER BY pg_relation_size(indexrelid) DESC;
 
 ---
 
-## 12. EXPLAIN & Query Analysis
+## 21. EXPLAIN & Query Analysis
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -1121,7 +2666,7 @@ Key fields:
 
 ---
 
-## 13. Joins
+## 22. Joins
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -1202,7 +2747,7 @@ FROM ROWS FROM (
 
 ---
 
-## 14. Subqueries
+## 23. Subqueries
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -1254,7 +2799,7 @@ PostgreSQL can sometimes rewrite subqueries as joins internally. But writing exp
 
 ---
 
-## 15. Lateral Joins
+## 24. Lateral Joins
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -1307,7 +2852,223 @@ LEFT JOIN LATERAL (
 
 ---
 
-## 16. Window Functions
+## 25. SET Operations & Combining Queries
+
+`UNION`, `INTERSECT`, and `EXCEPT` combine the result sets of two or more `SELECT` statements. They are useful for merging data from structurally similar tables, computing differences between result sets, and implementing certain logic patterns that are awkward to express as joins.
+
+### 🌍 When You'll Use This in the Real World
+
+- Merging data from partitioned tables that share the same schema (before you migrate to declarative partitioning).
+- Finding customers who placed orders in January AND February (INTERSECT) or only in January but not February (EXCEPT).
+- Building a consolidated feed of events from multiple event-type tables with identical columns.
+- Eliminating duplicate rows across two data sources during an ETL migration.
+- Detecting rows that exist in one environment but not another during a data validation step.
+
+### `UNION` vs `UNION ALL`
+
+`UNION` deduplicates rows across the combined result (using a sort or hash); `UNION ALL` simply concatenates and is significantly faster:
+
+```sql
+-- UNION: removes duplicate rows (expensive — requires sort or hash)
+SELECT user_id FROM newsletter_subscribers
+UNION
+SELECT user_id FROM premium_subscribers;
+
+-- UNION ALL: keeps all rows including duplicates (fast)
+SELECT user_id FROM newsletter_subscribers
+UNION ALL
+SELECT user_id FROM premium_subscribers;
+
+-- Performance: always prefer UNION ALL when you know rows are distinct
+-- or when duplicates are acceptable
+```
+
+**Cost difference:** `UNION` must process all rows to detect duplicates — O(n log n) for sort, O(n) for hash. `UNION ALL` is O(n). For large result sets, the difference is significant.
+
+### `INTERSECT` and `INTERSECT ALL`
+
+`INTERSECT` returns rows that appear in BOTH result sets (deduplicating). `INTERSECT ALL` returns each row as many times as it appears in both sets (taking the minimum count):
+
+```sql
+-- Customers who bought in both January and February
+SELECT customer_id FROM orders WHERE date_trunc('month', order_date) = '2024-01-01'
+INTERSECT
+SELECT customer_id FROM orders WHERE date_trunc('month', order_date) = '2024-02-01';
+
+-- Users present in both groups (with duplicates preserved per source)
+SELECT user_id FROM group_a
+INTERSECT ALL
+SELECT user_id FROM group_b;
+```
+
+### `EXCEPT` and `EXCEPT ALL`
+
+`EXCEPT` returns rows from the left query that do not appear in the right query. `EXCEPT ALL` uses multiset semantics:
+
+```sql
+-- Customers who bought in January but NOT in February (churned)
+SELECT customer_id FROM orders WHERE date_trunc('month', order_date) = '2024-01-01'
+EXCEPT
+SELECT customer_id FROM orders WHERE date_trunc('month', order_date) = '2024-02-01';
+
+-- Data validation: rows in production that are missing from staging
+SELECT id, email FROM prod_users
+EXCEPT
+SELECT id, email FROM staging_users
+ORDER BY id;
+```
+
+### Column Type Alignment Rules
+
+All queries in a set operation must return the same number of columns, and corresponding columns must have compatible types (or be implicitly castable):
+
+```sql
+-- Types must be compatible (implicit cast applied if necessary)
+SELECT id::bigint, name::text FROM customers
+UNION ALL
+SELECT id::bigint, company_name::text FROM vendors;
+
+-- The result column names come from the FIRST query in the set
+SELECT id, email AS contact FROM customers
+UNION ALL
+SELECT id, phone FROM vendors;
+-- Result column names: id, contact (from first query)
+
+-- Pad with NULLs when columns are structurally different
+SELECT 'customer' AS entity_type, id, name, NULL::text AS company
+FROM customers
+UNION ALL
+SELECT 'vendor',                   id, NULL, company_name
+FROM vendors;
+```
+
+### Ordering and Limiting Combined Results
+
+`ORDER BY` and `LIMIT` on the combined result must be placed at the end of the entire statement:
+
+```sql
+-- ORDER BY applies to the full combined result
+SELECT id, name, 'customer' AS type FROM customers
+UNION ALL
+SELECT id, name, 'vendor'   AS type FROM vendors
+ORDER BY name
+LIMIT 50;
+
+-- ORDER BY on individual branches (wrap in subquery)
+SELECT * FROM (
+    SELECT id, name FROM customers ORDER BY name LIMIT 100
+) c
+UNION ALL
+SELECT * FROM (
+    SELECT id, name FROM vendors ORDER BY name LIMIT 100
+) v
+ORDER BY name;
+```
+
+### `ROWS FROM` — Multiple Set-Returning Functions Side by Side
+
+`ROWS FROM` (also called a parallel function call) evaluates multiple set-returning functions and zips their rows together column-by-column:
+
+```sql
+-- Zip two SRFs together (rows aligned by position)
+SELECT *
+FROM ROWS FROM (
+    generate_series(1, 5),
+    generate_series(10, 50, 10)
+) AS t(a, b);
+-- Result: (1,10), (2,20), (3,30), (4,40), (5,50)
+
+-- When functions produce different row counts, shorter ones are padded with NULLs
+SELECT *
+FROM ROWS FROM (
+    generate_series(1, 3),
+    unnest(ARRAY['a','b'])
+) AS t(num, letter);
+-- Result: (1,'a'), (2,'b'), (3, NULL)
+
+-- Useful for combining unnested arrays in parallel
+SELECT num, letter
+FROM ROWS FROM (
+    unnest(ARRAY[10, 20, 30]),
+    unnest(ARRAY['x', 'y', 'z'])
+) AS t(num, letter);
+```
+
+### Subquery Elimination — How the Planner Rewrites Subqueries into Joins
+
+PostgreSQL's query planner performs **subquery flattening** (also called subquery pullup or unnesting): it rewrites subqueries into joins when it determines this will produce a better plan.
+
+```sql
+-- Written as a subquery
+SELECT * FROM orders
+WHERE customer_id IN (SELECT id FROM customers WHERE country = 'US');
+
+-- The planner may rewrite this as:
+SELECT DISTINCT o.* FROM orders o
+JOIN customers c ON c.id = o.customer_id
+WHERE c.country = 'US';
+
+-- Check with EXPLAIN to see what the planner actually does:
+EXPLAIN SELECT * FROM orders
+WHERE customer_id IN (SELECT id FROM customers WHERE country = 'US');
+-- Look for: "Hash Semi Join" or "Merge Semi Join" — the planner converted IN → a semi-join
+```
+
+**When the planner cannot flatten:**
+- Subqueries with `LIMIT`/`OFFSET` inside
+- Subqueries with `DISTINCT` in some contexts
+- Correlated subqueries that reference outer columns in complex ways
+- Subqueries inside `OR` conditions
+
+```sql
+-- This subquery CANNOT be flattened due to LIMIT:
+SELECT * FROM orders
+WHERE customer_id IN (SELECT id FROM customers WHERE country = 'US' LIMIT 10);
+
+-- Force materialization to prevent repeated evaluation of an expensive subquery
+SELECT * FROM orders o
+JOIN (SELECT id FROM customers WHERE country = 'US') c ON c.id = o.customer_id;
+-- The subquery may be materialized once by the planner
+
+-- Use LATERAL for correlated subqueries that the planner handles well
+SELECT o.*, recent.last_order_date
+FROM customers c
+CROSS JOIN LATERAL (
+    SELECT max(order_date) AS last_order_date
+    FROM orders WHERE customer_id = c.id
+) recent;
+```
+
+### Operator Precedence
+
+`INTERSECT` binds more tightly than `UNION` and `EXCEPT`. Use parentheses to make intent explicit:
+
+```sql
+-- Ambiguous: INTERSECT binds first
+SELECT a FROM t1
+UNION
+SELECT b FROM t2
+INTERSECT
+SELECT c FROM t3;
+-- Evaluated as: t1 UNION (t2 INTERSECT t3)
+
+-- Explicit with parentheses
+(SELECT a FROM t1 UNION SELECT b FROM t2)
+INTERSECT
+SELECT c FROM t3;
+```
+
+### Best Practices
+
+- Default to `UNION ALL` over `UNION`. If you need deduplication, use `UNION` deliberately and be aware of the cost.
+- Put `ORDER BY` and `LIMIT` after the entire combined query, not on individual branches (unless wrapping in subqueries).
+- Use `EXCEPT` for data validation and data diff queries — it is more readable than a `NOT EXISTS` join for this purpose.
+- Use parentheses when mixing `UNION`, `INTERSECT`, and `EXCEPT` to avoid relying on implicit precedence.
+- For large combined result sets, profile with `EXPLAIN ANALYZE` — set operations can be expensive and may be better expressed as joins with `DISTINCT` in some cases.
+
+---
+
+## 26. Window Functions
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -1406,7 +3167,181 @@ WINDOW w AS (PARTITION BY user_id ORDER BY created_at);
 
 ---
 
-## 17. CTEs (Common Table Expressions)
+## 27. Grouping Sets, ROLLUP & CUBE
+
+Standard `GROUP BY` produces one row per unique combination of the grouping columns. `GROUPING SETS`, `ROLLUP`, and `CUBE` are extensions that compute multiple grouping combinations in a single pass over the data — the equivalent of multiple `GROUP BY` queries combined with `UNION ALL`, but far more efficient and expressive.
+
+### 🌍 When You'll Use This in the Real World
+
+- Generating a sales report that shows totals by region, then by product category, then a grand total — all in one query.
+- Building a pivot-like dashboard where you need row subtotals, column subtotals, and a grand total simultaneously.
+- Feeding data warehouse fact tables where the ETL process needs pre-aggregated subtotals at multiple granularities.
+- Replacing a series of `UNION ALL` queries that each perform a full table scan with a single more efficient pass.
+
+### `GROUPING SETS`
+
+`GROUPING SETS` explicitly lists which grouping combinations to compute. Each set produces its own group of rows in the result:
+
+```sql
+SELECT region, product, SUM(sales) AS total_sales
+FROM sales_fact
+GROUP BY GROUPING SETS (
+    (region, product),   -- subtotal per region+product
+    (region),            -- subtotal per region
+    (product),           -- subtotal per product
+    ()                   -- grand total
+);
+
+-- This is exactly equivalent to (but much faster than):
+SELECT region, product, SUM(sales) FROM sales_fact GROUP BY region, product
+UNION ALL
+SELECT region, NULL,    SUM(sales) FROM sales_fact GROUP BY region
+UNION ALL
+SELECT NULL,   product, SUM(sales) FROM sales_fact GROUP BY product
+UNION ALL
+SELECT NULL,   NULL,    SUM(sales) FROM sales_fact;
+```
+
+In the result, columns that are not part of a particular grouping set appear as `NULL`. Use the `GROUPING()` function to distinguish these grouping NULLs from actual NULL data values.
+
+### `ROLLUP` — Hierarchical Subtotals
+
+`ROLLUP(a, b, c)` generates grouping sets for all prefixes of the column list plus the grand total:
+
+```sql
+-- ROLLUP(region, category, product) produces:
+-- (region, category, product), (region, category), (region), ()
+SELECT region, category, product, SUM(sales) AS total_sales
+FROM sales_fact
+GROUP BY ROLLUP(region, category, product)
+ORDER BY region NULLS LAST, category NULLS LAST, product NULLS LAST;
+```
+
+This is ideal for hierarchical data like `year → quarter → month`, `country → state → city`, or `department → team → employee`.
+
+```sql
+-- Time hierarchy rollup
+SELECT
+    date_trunc('year',  sale_date) AS year,
+    date_trunc('month', sale_date) AS month,
+    date_trunc('day',   sale_date) AS day,
+    SUM(amount) AS total
+FROM sales
+GROUP BY ROLLUP(
+    date_trunc('year',  sale_date),
+    date_trunc('month', sale_date),
+    date_trunc('day',   sale_date)
+)
+ORDER BY 1 NULLS LAST, 2 NULLS LAST, 3 NULLS LAST;
+```
+
+### `CUBE` — All Combinations
+
+`CUBE(a, b, c)` generates grouping sets for every possible subset (the power set) of the column list:
+
+```sql
+-- CUBE(region, category) produces:
+-- (region, category), (region), (category), ()
+SELECT region, category, SUM(sales)
+FROM sales_fact
+GROUP BY CUBE(region, category);
+
+-- CUBE(a, b, c) produces 2^3 = 8 combinations:
+-- (a,b,c), (a,b), (a,c), (b,c), (a), (b), (c), ()
+```
+
+`CUBE` is expensive for many columns — 2^n grouping sets. Use it only when you genuinely need every cross-tabulation.
+
+### The `GROUPING()` Function
+
+When grouping NULLs (produced by `ROLLUP`/`CUBE`/`GROUPING SETS`) appear alongside real NULL data, you need `GROUPING()` to tell them apart:
+
+```sql
+SELECT
+    CASE WHEN GROUPING(region)   = 1 THEN 'ALL REGIONS'   ELSE region   END AS region,
+    CASE WHEN GROUPING(category) = 1 THEN 'ALL CATEGORIES' ELSE category END AS category,
+    SUM(sales) AS total_sales,
+    GROUPING(region) AS is_region_total,
+    GROUPING(category) AS is_category_total
+FROM sales_fact
+GROUP BY ROLLUP(region, category)
+ORDER BY GROUPING(region), GROUPING(category), region, category;
+
+-- GROUPING() returns 1 if the column is aggregated (part of a subtotal row)
+--             returns 0 if the column is a real grouping value
+```
+
+### Practical Reporting Example
+
+```sql
+-- Sales dashboard: totals by channel and quarter, with subtotals
+SELECT
+    CASE WHEN GROUPING(channel) = 1      THEN 'Grand Total'
+         WHEN GROUPING(quarter) = 1      THEN channel || ' Total'
+         ELSE channel END AS channel_label,
+    CASE WHEN GROUPING(quarter) = 1 THEN NULL ELSE quarter END AS qtr,
+    SUM(revenue) AS revenue,
+    SUM(units)   AS units,
+    ROUND(SUM(revenue) / NULLIF(SUM(units), 0), 2) AS avg_price
+FROM (
+    SELECT
+        channel,
+        'Q' || EXTRACT(quarter FROM sale_date)::text AS quarter,
+        revenue,
+        units
+    FROM sales
+    WHERE EXTRACT(year FROM sale_date) = 2024
+) sub
+GROUP BY GROUPING SETS (
+    (channel, quarter),  -- detail rows
+    (channel),           -- channel subtotals
+    ()                   -- grand total
+)
+ORDER BY
+    GROUPING(channel),
+    channel NULLS LAST,
+    GROUPING(quarter),
+    qtr NULLS LAST;
+```
+
+### Performance Considerations
+
+```sql
+-- EXPLAIN shows a single Aggregate node with multiple grouping levels
+EXPLAIN ANALYZE
+SELECT region, SUM(sales)
+FROM sales_fact
+GROUP BY ROLLUP(region);
+
+-- With a large table, ROLLUP is significantly faster than UNION ALL
+-- because the data is scanned once and the planner sorts/hashes for all levels.
+
+-- Partial ROLLUP and CUBE can be combined with regular GROUP BY:
+SELECT year, ROLLUP(region, category), SUM(sales)
+FROM sales_fact
+GROUP BY year, ROLLUP(region, category);
+-- year is a fixed grouping; ROLLUP only applies to region, category
+```
+
+### Comparison Table
+
+| Feature | Syntax | Grouping Sets Produced | Best For |
+|---------|--------|----------------------|----------|
+| `GROUPING SETS` | `GROUPING SETS ((a,b),(a),())` | Exactly those listed | Full control over output |
+| `ROLLUP` | `ROLLUP(a, b, c)` | All prefixes + grand total | Hierarchical dimensions |
+| `CUBE` | `CUBE(a, b, c)` | All subsets (power set) | Cross-tabulation / pivots |
+
+### Best Practices
+
+- Use `ROLLUP` for date/time hierarchies and organizational hierarchies. It is the most common use case.
+- Use `GROUPING()` in CASE expressions to replace grouping NULLs with readable labels like "All Regions."
+- Avoid `CUBE` with more than 4 columns — the number of grouping sets grows as 2^n.
+- Sort output by `GROUPING()` expressions to bring subtotals and grand totals to intuitive positions.
+- Ensure the base table has an appropriate index to support the initial scan; ROLLUP/CUBE do not add scan costs beyond what `GROUP BY` already requires.
+
+---
+
+## 28. CTEs (Common Table Expressions)
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -1495,7 +3430,7 @@ SELECT * FROM new_data;
 
 ---
 
-## 18. Transactions & Concurrency Control
+## 29. Transactions & Concurrency Control
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -1603,7 +3538,7 @@ SET lock_timeout = '5s';  -- fail if lock not acquired within 5 seconds
 
 ---
 
-## 19. Table Partitioning
+## 30. Table Partitioning
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -1686,7 +3621,7 @@ DROP TABLE events_2024_q1;
 
 ---
 
-## 20. Views & Materialized Views
+## 31. Views & Materialized Views
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -1751,7 +3686,7 @@ REFRESH MATERIALIZED VIEW CONCURRENTLY monthly_revenue;
 
 ---
 
-## 21. Stored Procedures & Functions
+## 32. Stored Procedures & Functions
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -1844,7 +3779,7 @@ CALL batch_process_orders(5000);
 
 ---
 
-## 22. Triggers & Event-Driven Logic
+## 33. Triggers & Event-Driven Logic
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -1937,7 +3872,7 @@ CREATE EVENT TRIGGER ddl_logger ON ddl_command_end EXECUTE FUNCTION log_ddl_even
 
 ---
 
-## 23. Roles, Privileges & Row-Level Security
+## 34. Roles, Privileges & Row-Level Security
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -2009,7 +3944,7 @@ ALTER TABLE orders FORCE ROW LEVEL SECURITY;
 
 ---
 
-## 24. Performance Tuning & Configuration
+## 35. Performance Tuning & Configuration
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -2065,7 +4000,7 @@ LIMIT 10;
 
 ---
 
-## 25. Vacuum, Autovacuum & Bloat Management
+## 36. Vacuum, Autovacuum & Bloat Management
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -2138,7 +4073,7 @@ This is a **critical alert**. The database will shut down to prevent data loss i
 
 ---
 
-## 26. Backup, Recovery & Replication
+## 37. Backup, Recovery & Replication
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -2197,7 +4132,7 @@ CREATE SUBSCRIPTION my_sub
 
 ---
 
-## 27. Extensions
+## 38. Extensions
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -2236,7 +4171,295 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 ---
 
-## 28. Utility Patterns & Recipes
+## 39. pgvector & Semantic Search
+
+**pgvector** is a PostgreSQL extension that adds a `vector` data type and distance-based search operators, enabling semantic similarity search directly in the database. Instead of a separate vector database, you can store embeddings alongside your relational data and combine semantic search with SQL filtering, joins, and transactions.
+
+### 🌍 When You'll Use This in the Real World
+
+- **RAG (Retrieval-Augmented Generation)**: Store document chunk embeddings in PostgreSQL; at query time, find the most relevant chunks using cosine similarity, then pass them to an LLM as context.
+- **Recommendation engines**: Store user and item embeddings; find the N most similar items to what a user recently interacted with.
+- **Duplicate/near-duplicate detection**: Detect duplicate support tickets, product listings, or user profiles using embedding similarity.
+- **Semantic search**: A user searches "comfortable running shoes" and matches product descriptions that say "cushioned athletic footwear" — keyword search misses it, vector search finds it.
+- **Image and audio search**: Store embeddings of images or audio files; search by visual or sonic similarity.
+
+### Installing pgvector
+
+```sql
+-- On most platforms, install via the system package manager first
+-- Ubuntu/Debian: apt install postgresql-16-pgvector
+-- macOS (Homebrew): brew install pgvector
+-- AWS RDS / Supabase: available as a managed extension
+
+-- Then enable in your database:
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Verify
+SELECT * FROM pg_extension WHERE extname = 'vector';
+```
+
+### The `vector` Type
+
+`vector(n)` stores a fixed-dimension array of 32-bit floats. The dimension `n` must match the embedding model output:
+
+| Model | Dimensions |
+|-------|-----------|
+| OpenAI text-embedding-3-small | 1536 (or configured lower) |
+| OpenAI text-embedding-3-large | 3072 |
+| OpenAI text-embedding-ada-002 | 1536 |
+| Cohere embed-english-v3.0 | 1024 |
+| Google text-embedding-004 | 768 |
+| Nomic embed-text | 768 |
+| BGE-M3 | 1024 |
+
+```sql
+-- Create a table with a vector column
+CREATE TABLE documents (
+    id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    content     text NOT NULL,
+    source_url  text,
+    embedding   vector(1536),       -- must match your embedding model's output dimension
+    created_at  timestamptz DEFAULT now()
+);
+
+-- Insert a row with a literal vector (for testing)
+INSERT INTO documents (content, embedding)
+VALUES ('Hello world', '[0.1, 0.2, 0.3, ...]');   -- 1536 values
+
+-- In practice, embeddings come from your application:
+-- embedding = openai.embeddings.create(input=content, model="text-embedding-3-small").data[0].embedding
+```
+
+### Distance Operators
+
+pgvector provides three distance operators, each corresponding to a different similarity metric:
+
+| Operator | Distance Metric | Use When |
+|----------|----------------|----------|
+| `<->` | L2 (Euclidean) distance | Normalized embeddings or when magnitude matters |
+| `<#>` | Negative inner product | Normalized embeddings (higher = more similar; negate to get distance) |
+| `<=>` | Cosine distance | Most language models (direction matters, magnitude does not) |
+
+```sql
+-- Find the 10 most similar documents to a query embedding (cosine similarity)
+SELECT id, content, (embedding <=> '[0.1, 0.2, ...]'::vector) AS distance
+FROM documents
+ORDER BY embedding <=> '[0.1, 0.2, ...]'::vector
+LIMIT 10;
+
+-- L2 distance (Euclidean)
+SELECT id, content, embedding <-> '[0.1, 0.2, ...]'::vector AS l2_distance
+FROM documents
+ORDER BY embedding <-> '[0.1, 0.2, ...]'::vector
+LIMIT 10;
+
+-- Inner product (note: <#> returns negative inner product; use - to get positive similarity)
+SELECT id, content, -(embedding <#> '[0.1, 0.2, ...]'::vector) AS similarity
+FROM documents
+ORDER BY embedding <#> '[0.1, 0.2, ...]'::vector
+LIMIT 10;
+```
+
+### Creating Vector Indexes
+
+Without an index, every similarity query does a sequential scan — computing the distance to every row. For tables with more than ~10,000 rows, you need an ANN (approximate nearest-neighbor) index.
+
+pgvector supports two index types:
+
+#### IVFFlat — Inverted File with Flat Quantization
+
+Splits the vector space into `lists` clusters (Voronoi cells) using k-means. At query time, it searches only the closest `probes` clusters.
+
+```sql
+-- Build index after loading data (IVFFlat needs data to train the k-means clusters)
+-- Rule of thumb: lists = rows / 1000 (for up to 1M rows)
+CREATE INDEX idx_documents_embedding_ivfflat
+ON documents
+USING ivfflat (embedding vector_cosine_ops)    -- or vector_l2_ops / vector_ip_ops
+WITH (lists = 100);
+
+-- Tune probes at query time (higher = more accurate, slower)
+SET ivfflat.probes = 10;   -- default 1; try 5–20 for better recall
+```
+
+#### HNSW — Hierarchical Navigable Small World
+
+Builds a layered graph structure. Faster queries than IVFFlat with better recall, but uses more memory and takes longer to build.
+
+```sql
+-- HNSW can be built on an empty table (no data needed for training)
+-- m: max connections per node (default 16; higher = better recall, more memory)
+-- ef_construction: size of the candidate list during build (default 64; higher = better recall, slower build)
+CREATE INDEX idx_documents_embedding_hnsw
+ON documents
+USING hnsw (embedding vector_cosine_ops)
+WITH (m = 16, ef_construction = 64);
+
+-- Tune ef_search at query time
+SET hnsw.ef_search = 100;   -- default 40; higher = better recall, slower
+```
+
+#### IVFFlat vs HNSW Comparison
+
+| Factor | IVFFlat | HNSW |
+|--------|---------|------|
+| Build speed | Fast | Slow (graph construction) |
+| Query speed | Moderate | Fast |
+| Memory usage | Low | Higher (~2-3x IVFFlat) |
+| Recall quality | Good | Better |
+| Requires training data | Yes (build after loading) | No |
+| Index updates | OK | Better (no full rebuild) |
+| Best for | Batch workloads, infrequent updates | High-QPS, streaming inserts |
+
+### Upsert Patterns for Embedding Tables
+
+In RAG and recommendation systems, embeddings are frequently regenerated. Use `INSERT ... ON CONFLICT DO UPDATE`:
+
+```sql
+-- Upsert by natural key (source URL)
+INSERT INTO documents (content, source_url, embedding)
+VALUES ($1, $2, $3)
+ON CONFLICT (source_url) DO UPDATE
+    SET content    = EXCLUDED.content,
+        embedding  = EXCLUDED.embedding,
+        created_at = now()
+WHERE documents.content IS DISTINCT FROM EXCLUDED.content;
+-- Only update if content actually changed (avoids unnecessary index churn)
+
+-- Batch upsert from application
+INSERT INTO documents (content, source_url, embedding)
+SELECT unnest($1::text[]), unnest($2::text[]), unnest($3::vector[])
+ON CONFLICT (source_url) DO UPDATE
+    SET content   = EXCLUDED.content,
+        embedding = EXCLUDED.embedding;
+```
+
+### Combining Semantic Search with Keyword Full-Text Search
+
+Hybrid search — combining vector similarity with BM25-style keyword matching — produces better results than either alone:
+
+```sql
+-- Add a tsvector column for keyword search
+ALTER TABLE documents ADD COLUMN fts tsvector
+    GENERATED ALWAYS AS (to_tsvector('english', content)) STORED;
+
+CREATE INDEX idx_documents_fts ON documents USING gin (fts);
+
+-- Hybrid search: keyword pre-filter then re-rank by vector similarity
+WITH keyword_matches AS (
+    SELECT id, content, embedding,
+           ts_rank(fts, query) AS text_rank
+    FROM documents,
+         websearch_to_tsquery('english', 'running shoes cushioned') query
+    WHERE fts @@ query
+    LIMIT 200   -- cast a wide net with keyword search
+)
+SELECT id, content,
+       text_rank,
+       embedding <=> '[...]'::vector AS vector_distance,
+       -- Reciprocal rank fusion score (combine both signals)
+       0.5 * text_rank + 0.5 * (1 - (embedding <=> '[...]'::vector)) AS hybrid_score
+FROM keyword_matches
+ORDER BY hybrid_score DESC
+LIMIT 10;
+```
+
+### Filtering Before Vector Search
+
+Combine vector search with SQL filters to limit the search scope:
+
+```sql
+-- Find similar documents in a specific project and date range
+SELECT id, content, embedding <=> $1::vector AS distance
+FROM documents
+WHERE project_id = $2
+  AND created_at >= now() - interval '30 days'
+  AND embedding <=> $1::vector < 0.3    -- distance threshold (cosine: 0=identical, 2=opposite)
+ORDER BY distance
+LIMIT 20;
+
+-- IMPORTANT: pre-filtering with WHERE reduces the candidate set before vector distance is computed
+-- This is efficient when the WHERE clause is selective (uses an index on project_id/created_at)
+-- The vector index is used for the ORDER BY distance clause
+```
+
+### Chunking Strategy for RAG
+
+The embedding quality heavily depends on how you split documents into chunks:
+
+```sql
+-- Store chunk metadata alongside the embedding
+CREATE TABLE document_chunks (
+    id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    document_id   bigint NOT NULL REFERENCES documents (id) ON DELETE CASCADE,
+    chunk_index   integer NOT NULL,
+    content       text NOT NULL,
+    token_count   integer,
+    embedding     vector(1536),
+    -- Store the chunk's source context for retrieval
+    section_title text,
+    page_number   integer,
+    UNIQUE (document_id, chunk_index)
+);
+
+CREATE INDEX idx_chunks_document ON document_chunks (document_id);
+CREATE INDEX idx_chunks_embedding ON document_chunks USING hnsw (embedding vector_cosine_ops);
+
+-- RAG query: find most relevant chunks, then join back to full document metadata
+SELECT
+    dc.content AS chunk_text,
+    d.source_url,
+    dc.section_title,
+    dc.embedding <=> $1::vector AS distance
+FROM document_chunks dc
+JOIN documents d ON d.id = dc.document_id
+ORDER BY dc.embedding <=> $1::vector
+LIMIT 5;
+```
+
+### Monitoring Index Quality
+
+```sql
+-- Check index usage
+SELECT relname, indexrelname, idx_scan, idx_tup_read, idx_tup_fetch
+FROM pg_stat_user_indexes
+WHERE indexrelname LIKE '%embedding%';
+
+-- Estimate recall quality by comparing ANN results to exact search on a sample
+-- (run both queries on a small subset and measure overlap)
+WITH exact AS (
+    SELECT id FROM document_chunks
+    ORDER BY embedding <-> $1::vector LIMIT 10
+),
+approximate AS (
+    SELECT id FROM document_chunks
+    ORDER BY embedding <-> $1::vector LIMIT 10  -- same with index enabled
+)
+SELECT
+    (SELECT count(*) FROM exact e JOIN approximate a ON a.id = e.id)::float / 10
+    AS recall_at_10;
+```
+
+### Best Practices
+
+- Choose the distance operator that matches your embedding model. Most language embedding models are trained with cosine similarity — use `<=>` (cosine distance).
+- Normalize embeddings before storing them when using inner product (`<#>`) to make it equivalent to cosine similarity — this can be faster.
+- Build HNSW indexes for production query workloads and IVFFlat for batch analytical workloads or when memory is constrained.
+- Always tune `hnsw.ef_search` or `ivfflat.probes` upward if recall quality matters more than raw latency.
+- Use a distance threshold (`embedding <=> $1 < 0.3`) to filter out poor matches rather than returning a fixed `LIMIT` regardless of similarity.
+- Keep embedding dimensions as low as your accuracy requirements allow — lower dimensions mean smaller indexes, faster queries, and less memory.
+- For RAG systems, store chunks, not full documents, and include enough metadata (source, section, page) to construct attribution information for LLM responses.
+- Index `project_id`, `tenant_id`, and other filter columns separately so the planner can combine them with the vector index efficiently.
+
+---
+
+*Comprehensive PostgreSQL reference — from study notes to architect-level guide. Updated for PostgreSQL 15+.*
+
+---
+
+> This guide was created based on the source **Mastering Postgres** (by Aaron Francis), widely regarded as one of the best PostgreSQL courses.
+
+## 40. Utility Patterns & Recipes
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -2373,7 +4596,7 @@ SELECT pg_size_pretty(pg_database_size('mydb'));
 
 ---
 
-## 29. Quick Reference Cheatsheet
+## 41. Quick Reference Cheatsheet
 
 ### Data Type Decisions
 
@@ -2426,7 +4649,7 @@ SELECT pg_size_pretty(pg_database_size('mydb'));
 
 ---
 
-## 30. Anti-Patterns to Avoid
+## 42. Anti-Patterns to Avoid
 
 ### 🌍 When You'll Encounter These in the Real World
 
@@ -2477,8 +4700,3 @@ ALTER ROLE app_user SET lock_timeout = '10s';
 
 ---
 
-*Comprehensive PostgreSQL reference — from study notes to architect-level guide. Updated for PostgreSQL 15+.*
-
----
-
-> This guide was created based on the source **Mastering Postgres** (by Aaron Francis), widely regarded as one of the best PostgreSQL courses.
