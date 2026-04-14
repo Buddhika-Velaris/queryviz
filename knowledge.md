@@ -2575,6 +2575,221 @@ CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_orders_user_id_created_at ON orders(user_id, created_at);
 ```
 
+### Heaps & CTIDs
+
+Every table in PostgreSQL is a **heap** — rows are stored in 8KB pages, appended in insert order with no inherent sorting. Every row has a `ctid` (current tuple ID) — a physical address in the format `(page, slot)`.
+
+```sql
+-- ctid is a hidden system column on every table
+SELECT ctid, id, email FROM users LIMIT 5;
+-- (0,1)  1  alice@example.com
+-- (0,2)  2  bob@example.com
+-- (1,1)  3  carol@example.com  -- on page 1
+
+-- After UPDATE or DELETE + VACUUM, ctids change — never use ctid as a stable reference
+SELECT ctid FROM orders WHERE id = 42;
+```
+
+Why it matters for indexes:
+- Every index entry stores a `ctid` pointer back to the heap row.
+- An **index scan** finds matching ctids, then fetches each heap row (may cause random I/O).
+- An **index-only scan** (with `INCLUDE` covering columns) avoids heap fetches entirely.
+- **Heap bloat** from updates/deletes leaves dead tuples — VACUUM reclaims them and updates the visibility map.
+
+```sql
+-- Check heap bloat
+SELECT relname, n_dead_tup, n_live_tup,
+       round(100.0 * n_dead_tup / nullif(n_live_tup + n_dead_tup, 0), 1) AS dead_pct
+FROM pg_stat_user_tables
+ORDER BY n_dead_tup DESC;
+```
+
+### Primary Keys vs. Secondary Indexes
+
+| | Primary Key | Secondary Index |
+|---|---|---|
+| Uniqueness | Required | Optional |
+| NULLs allowed | Never | Yes (unless UNIQUE) |
+| Count per table | One | Unlimited |
+| Created automatically | Yes (via PK constraint) | Explicit `CREATE INDEX` |
+| Used in FK references | Yes | No (must be unique or PK) |
+| Affects row ordering | No (heap is unordered) | No |
+| Index-only scan possible | Yes (with INCLUDE) | Yes (with INCLUDE) |
+
+```sql
+-- Primary key — implicit unique B-tree index
+CREATE TABLE orders (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  user_id BIGINT NOT NULL REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Secondary index — must be explicit
+CREATE INDEX idx_orders_user ON orders(user_id);
+CREATE INDEX idx_orders_created ON orders(created_at DESC);
+```
+
+### Primary Key Type Comparison
+
+Choosing the right PK type has significant performance and operational consequences:
+
+| Type | Size | Sequential | Globally Unique | Sortable | Recommendation |
+|---|---|---|---|---|---|
+| `BIGINT IDENTITY` | 8 bytes | ✅ Yes | ❌ No | ✅ Yes | Default choice for internal tables |
+| `UUID v4` | 16 bytes | ❌ Random | ✅ Yes | ❌ Random | Distributed systems, public IDs |
+| `UUID v7` | 16 bytes | ✅ Time-ordered | ✅ Yes | ✅ Yes | Best of both — prefer over v4 |
+| `ULID` | 16 bytes | ✅ Time-ordered | ✅ Yes | ✅ Yes | Same as UUID v7, text-sortable |
+
+```sql
+-- BIGINT IDENTITY (fastest, smallest, no cross-system uniqueness)
+id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+
+-- UUID v4 (random — causes index fragmentation on large tables)
+id UUID DEFAULT gen_random_uuid() PRIMARY KEY
+
+-- UUID v7 (time-ordered — good B-tree locality, PG 17+ has gen_uuid_v7())
+-- In PG 16 and earlier, use the uuid-ossp extension or a custom function
+id UUID DEFAULT gen_random_uuid() PRIMARY KEY  -- replace with v7 when available
+```
+
+> **Key insight**: Random UUIDs (v4) fragment B-tree indexes because new entries insert at random positions rather than appending to the right side. On write-heavy tables this causes frequent page splits. Use sequential IDs or time-ordered UUIDs (v7) to maintain B-tree fill efficiency.
+
+### Index Selectivity
+
+**Selectivity** = how well an index narrows down the result set. The planner estimates it using column statistics.
+
+```sql
+-- Check column statistics (n_distinct < 0 means fraction of rows, > 0 means count)
+SELECT attname, n_distinct, correlation
+FROM pg_stats
+WHERE tablename = 'orders' AND attname IN ('status', 'user_id', 'created_at');
+```
+
+| Column | n_distinct | Selectivity | Index worthwhile? |
+|---|---|---|---|
+| `status` (5 values) | 5 | Low (20% per value) | Only with partial index |
+| `user_id` | -0.95 | High (one user per many rows) | ✅ Yes |
+| `created_at` | Very high | Very high | ✅ Yes |
+| `is_active` (boolean) | 2 | Very low (50%) | ❌ No (unless partial) |
+
+The planner uses statistics to decide whether to use an index or do a sequential scan. When the estimated fraction of rows is large (e.g. >10–20% for simple queries), a sequential scan is often faster due to better I/O locality.
+
+```sql
+-- Force statistics refresh
+ANALYZE orders;
+
+-- Check how the planner estimates a query
+EXPLAIN SELECT * FROM orders WHERE status = 'pending';
+-- If rows= is grossly wrong, run ANALYZE or increase statistics target:
+ALTER TABLE orders ALTER COLUMN status SET STATISTICS 500;
+ANALYZE orders;
+```
+
+### Composite Range Queries
+
+Composite indexes support range queries on the **last** column after equality filters on leading columns:
+
+```sql
+-- Index on (tenant_id, created_at)
+CREATE INDEX idx_orders_tenant_date ON orders(tenant_id, created_at);
+
+-- ✅ Uses index: equality on tenant_id, range on created_at
+SELECT * FROM orders
+WHERE tenant_id = 42
+  AND created_at >= '2024-01-01'
+  AND created_at < '2024-02-01';
+
+-- ❌ Cannot use both range conditions efficiently:
+-- Postgres can only range-scan one column at the B-tree leaf level
+SELECT * FROM orders
+WHERE created_at >= '2024-01-01'    -- range on first col
+  AND user_id > 1000;               -- range on second col — index helps less here
+```
+
+> **Rule**: In a composite index `(A, B, C)`, you can have an equality filter on A and B, then a range on C. Two adjacent range filters mean the second range filter must be re-checked after scanning the first range.
+
+```sql
+-- Multi-dimensional ranges: use GiST with range types
+CREATE INDEX idx_bookings_range ON bookings USING GIST (during);
+
+-- Now this efficiently checks overlap:
+SELECT * FROM bookings WHERE during && '[2024-06-01, 2024-06-07)';
+```
+
+### Combining Multiple Indexes (Bitmap Scans)
+
+When a query filters on two columns that each have separate indexes, PostgreSQL may use **bitmap index scans** to combine them:
+
+```sql
+CREATE INDEX idx_orders_status ON orders(status);
+CREATE INDEX idx_orders_user   ON orders(user_id);
+
+-- PostgreSQL may combine both indexes with a BitmapAnd:
+SELECT * FROM orders WHERE status = 'pending' AND user_id = 42;
+```
+
+```
+Bitmap Heap Scan on orders
+  Recheck Cond: ((status = 'pending') AND (user_id = 42))
+  ->  BitmapAnd
+        ->  Bitmap Index Scan on idx_orders_status
+        ->  Bitmap Index Scan on idx_orders_user
+```
+
+How it works:
+1. Each index scan produces a **bitmap** (one bit per heap page).
+2. The bitmaps are ANDed (or ORed for `OR` queries) in memory.
+3. Heap pages matching the final bitmap are fetched, with row-level recheck.
+
+```sql
+-- OR conditions: BitmapOr
+SELECT * FROM orders WHERE status = 'pending' OR status = 'processing';
+-- Better written as:
+SELECT * FROM orders WHERE status = ANY(ARRAY['pending', 'processing']);
+```
+
+> 💡 **When to create a composite index vs. rely on bitmap scans**: If the same column combination is queried together frequently, a composite index is faster (single scan, no bitmap merge). Use separate indexes when columns are also queried independently.
+
+### Duplicate Index Detection
+
+Redundant indexes slow down writes and waste disk. The system table `pg_index` lets you find them:
+
+```sql
+-- Find exact duplicate indexes (same table + columns)
+SELECT
+  t.relname AS table_name,
+  array_agg(i.relname ORDER BY i.relname) AS duplicate_indexes,
+  ix.indkey AS columns
+FROM pg_index ix
+JOIN pg_class t ON t.oid = ix.indrelid
+JOIN pg_class i ON i.oid = ix.indexrelid
+WHERE NOT ix.indisprimary
+GROUP BY t.relname, ix.indkey
+HAVING count(*) > 1
+ORDER BY t.relname;
+
+-- Find indexes made redundant by a wider composite index
+-- e.g., idx_orders_user is redundant if idx_orders_user_date exists (user_id, created_at)
+SELECT
+  i1.relname AS redundant_index,
+  i2.relname AS covering_index,
+  t.relname  AS table_name
+FROM pg_index ix1
+JOIN pg_index ix2 ON ix1.indrelid = ix2.indrelid
+                 AND ix1.indexrelid <> ix2.indexrelid
+                 AND (ix1.indkey::text LIKE ix2.indkey::text || '%'
+                      OR ix2.indkey::text LIKE ix1.indkey::text || '%')
+JOIN pg_class t  ON t.oid  = ix1.indrelid
+JOIN pg_class i1 ON i1.oid = ix1.indexrelid
+JOIN pg_class i2 ON i2.oid = ix2.indexrelid
+WHERE NOT ix1.indisprimary AND NOT ix2.indisprimary;
+```
+
+```sql
+-- Safe removal: use CONCURRENTLY so live traffic is unaffected
+DROP INDEX CONCURRENTLY idx_redundant_index;
+```
+
 ### ✅ Before Adding Any Index
 
 1. Check existing indexes: `SELECT * FROM pg_indexes WHERE tablename = 'your_table';`
