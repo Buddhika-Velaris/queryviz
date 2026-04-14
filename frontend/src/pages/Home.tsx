@@ -105,7 +105,7 @@ export default function Home() {
       </section>
 
       {/* Features */}
-      <section className="max-w-6xl mx-auto px-4 pb-20">
+      <section className="max-w-6xl xl:max-w-7xl 2xl:max-w-screen-2xl mx-auto px-4 pb-20">
         <div className="text-center mb-12">
           <h2 className="text-2xl font-bold text-gray-100 mb-2">Everything you need to tune queries</h2>
           <p className="text-gray-500 text-sm">From raw EXPLAIN JSON to actionable fixes in seconds.</p>
@@ -128,7 +128,7 @@ export default function Home() {
       </section>
 
       {/* How to use */}
-      <section className="max-w-3xl mx-auto px-4 pb-24">
+      <section className="max-w-3xl xl:max-w-4xl 2xl:max-w-5xl mx-auto px-4 pb-24">
         <div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">
           {/* Header */}
           <div className="flex items-center gap-2 px-5 py-3.5 border-b border-gray-800 bg-gray-800/40">

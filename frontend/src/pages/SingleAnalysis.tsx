@@ -27,7 +27,7 @@ export default function SingleAnalysis() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <div className="max-w-5xl xl:max-w-7xl 2xl:max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       {/* Page header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-100 mb-1">Single Query Analysis</h1>
