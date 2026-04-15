@@ -317,20 +317,16 @@ function ResultPanel({ result, cached }: { result: SchemaValidationResult; cache
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
-const PLACEHOLDER = `-- Paste your PostgreSQL DDL here, e.g.:
-CREATE TABLE IF NOT EXISTS public.task_status_config (
-  status_config_id  INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  label             VARCHAR(50)  NOT NULL,
-  internal_name     VARCHAR(50)  NOT NULL,
-  category          VARCHAR(20)  NOT NULL
-                    CONSTRAINT chk_category CHECK (category IN ('NOT_STARTED','ACTIVE','CLOSED')),
-  color             VARCHAR(7)   NOT NULL DEFAULT '#808080',
-  is_enabled        BOOLEAN      NOT NULL DEFAULT TRUE,
-  created_by        INTEGER      NOT NULL,
-  created           TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-  modified          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-  archived          SMALLINT     NOT NULL DEFAULT 0
-);`;
+const PLACEHOLDER = `-- Paste your PostgreSQL DDL here — tables, indexes, constraints, ALTERs, triggers.
+-- Example:
+CREATE TABLE public.orders (
+  order_id    BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  user_id     BIGINT      NOT NULL REFERENCES public.users(user_id),
+  total       NUMERIC(12,2) NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_orders_user_id ON public.orders (user_id);`;
 
 export default function SchemaValidator() {
   const { schemaValidation, setSchemaValidation, clearSchemaValidation } = useAnalysisStore();
