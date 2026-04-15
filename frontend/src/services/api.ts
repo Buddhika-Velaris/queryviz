@@ -216,4 +216,49 @@ export async function generateFlashcards(
   });
 }
 
+// ─── Schema validation ────────────────────────────────────────────────────────
+
+export interface SchemaFinding {
+  severity: 'critical' | 'warning' | 'info' | 'success';
+  title: string;
+  description: string;
+  knowledgeRef?: string;
+}
+
+export interface SchemaRecommendation {
+  priority: 'high' | 'medium' | 'low';
+  title: string;
+  description: string;
+}
+
+export interface SuggestedReading {
+  sectionRef: string;
+  number: number;
+  title: string;
+  reason: string;
+}
+
+export interface SchemaValidationResult {
+  overallScore: number;
+  scoreLabel: string;
+  designSummary: string;
+  findings: SchemaFinding[];
+  recommendations: SchemaRecommendation[];
+  correctedSchema: string;
+  suggestedReadings: SuggestedReading[];
+  summary: string;
+}
+
+export async function validateSchema(
+  sql: string,
+  userContext?: string,
+): Promise<{ result: SchemaValidationResult; cached: boolean }> {
+  try {
+    const response = await api.post('/validate/schema', { sql, userContext: userContext?.trim() || undefined });
+    return response.data as { result: SchemaValidationResult; cached: boolean };
+  } catch (error: any) {
+    throw new Error(error.response?.data?.error || 'Failed to validate schema');
+  }
+}
+
 export default api;

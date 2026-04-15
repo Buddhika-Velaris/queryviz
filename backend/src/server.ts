@@ -7,6 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import analyzeRouter from './routes/analyze.js';
 import learnRouter from './routes/learn.js';
+import validateRouter from './routes/validate.js';
 
 dotenv.config();
 
@@ -55,6 +56,7 @@ app.get('/health', (req, res) => {
 // API routes
 app.use('/api/analyze', analyzeRouter);
 app.use('/api/learn', learnRouter);
+app.use('/api/validate', validateRouter);
 
 // Serve static files from frontend build in production
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
