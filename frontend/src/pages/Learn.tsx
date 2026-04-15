@@ -1005,12 +1005,6 @@ export default function Learn() {
         </nav>
 
         <div className="px-4 py-4 border-t border-gray-800 flex-shrink-0 bg-gray-900/60">
-          <div className="flex items-center gap-2 mb-1.5">
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-gray-300 leading-tight">Aaron Francis</p>
-              <p className="text-[10px] text-gray-600 leading-tight">@aarondfrancis</p>
-            </div>
-          </div>
           <p className="text-[10px] text-gray-500 leading-relaxed mt-1.5">
             Content based on{' '}
             <a

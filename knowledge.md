@@ -3560,16 +3560,18 @@ GROUP BY year, ROLLUP(region, category);
 
 ### 🌍 When You'll Use This in the Real World
 
-- **Complex reporting queries**: Break a 100-line query into named steps — `active_users`, `user_orders`, `revenue_by_tier` — so teammates can read and maintain it.
-- **Org chart traversal**: Recursive CTEs walk tree structures — employee hierarchies, category trees, threaded comments, bill-of-materials explosions.
-- **Data archival**: Writable CTEs let you `DELETE` old records and `INSERT` them into an archive table in a single atomic statement — no risk of deleting without archiving.
-- **ETL pipelines**: Chain CTEs to extract, transform, and load data in one query: clean raw imports, deduplicate, compute derived fields, then insert into the final table.
+- **Complex analytics pipelines**: Stage data in named blocks (`filtered_orders`, `daily_revenue`, `rolling_avg`) so each transformation is explicit.
+- **Hierarchy traversal**: Expand trees and graphs for org charts, category trees, referral chains, dependency graphs.
+- **Safe multi-step writes**: Move/archive/update data in one SQL statement with clear data flow and transactional consistency.
+- **Incremental ETL in SQL**: Deduplicate raw records, compute canonical keys, and load targets with one auditable statement.
 
-A CTE is a **named temporary result set** defined with `WITH`, making complex queries more readable and maintainable.
+A CTE is a **named temporary result set** defined with `WITH` (or `WITH RECURSIVE`) and scoped to a single SQL statement.
 
 ```sql
 WITH active_users AS (
-  SELECT id, name FROM users WHERE active = TRUE
+  SELECT id, name
+  FROM users
+  WHERE active = TRUE
 ),
 user_orders AS (
   SELECT user_id, COUNT(*) AS order_count
@@ -3582,66 +3584,255 @@ JOIN user_orders o ON u.id = o.user_id
 ORDER BY o.order_count DESC;
 ```
 
-### CTE Materialization (PostgreSQL 12+)
+### Mental Model
 
-By default, CTEs in PostgreSQL 12+ can be inlined (optimized like subqueries). You can force materialization if needed:
+Think of CTEs as "inline, named views" for one statement:
+
+1. You define one or more named query blocks.
+2. Later blocks can reference earlier blocks.
+3. The final query consumes one or more of those blocks.
 
 ```sql
--- Force materialization (useful as an optimization fence)
-WITH user_stats AS MATERIALIZED (
-  SELECT user_id, COUNT(*) AS cnt FROM orders GROUP BY user_id
-)
-SELECT * FROM user_stats WHERE cnt > 10;
-
--- Force inlining (default behavior, but explicit)
-WITH user_stats AS NOT MATERIALIZED (
-  SELECT user_id, COUNT(*) AS cnt FROM orders GROUP BY user_id
-)
-SELECT * FROM user_stats WHERE cnt > 10;
+WITH a AS (...),
+     b AS (SELECT ... FROM a),
+     c AS (SELECT ... FROM b)
+SELECT ... FROM c;
 ```
 
-### Recursive CTE
+The result is usually easier to read than deeply nested subqueries, especially when each step has a meaningful name.
+
+### CTE vs Subquery vs Temp Table
+
+| Tool | Best For | Lifetime | Planner Flexibility |
+|---|---|---|---|
+| CTE | Readability, multi-step logic, recursion | Single statement | High (PG12+ may inline) |
+| Subquery | Small local transformations | Single statement | High |
+| Temp table | Reuse across multiple statements, debugging large intermediate results | Session/transaction | Separate planning per statement |
+
+Use a **CTE** when the logical steps matter for maintainability; use a **temp table** when intermediate data must be reused in multiple statements.
+
+### Execution & Optimization Semantics
+
+In PostgreSQL 12+, non-recursive CTEs are no longer always optimization fences.
+
+- The planner can inline a CTE into the outer query.
+- You can force behavior with `MATERIALIZED` / `NOT MATERIALIZED`.
 
 ```sql
--- Traverse an org chart hierarchy
+-- Evaluate once and store intermediate result
+WITH user_stats AS MATERIALIZED (
+  SELECT user_id, COUNT(*) AS cnt
+  FROM orders
+  GROUP BY user_id
+)
+SELECT *
+FROM user_stats
+WHERE cnt > 10;
+
+-- Encourage inlining into outer query
+WITH user_stats AS NOT MATERIALIZED (
+  SELECT user_id, COUNT(*) AS cnt
+  FROM orders
+  GROUP BY user_id
+)
+SELECT *
+FROM user_stats
+WHERE cnt > 10;
+```
+
+When `MATERIALIZED` helps:
+- The CTE is expensive and referenced multiple times.
+- You want a stable intermediate result for the statement.
+
+When `NOT MATERIALIZED` helps:
+- You want predicate pushdown from the outer query.
+- The CTE is cheap and benefits from global optimization.
+
+### Multi-Use CTE Example (Avoid Repeating Work)
+
+```sql
+WITH heavy AS MATERIALIZED (
+  SELECT user_id, SUM(amount) AS total_amount
+  FROM payments
+  WHERE paid_at >= NOW() - INTERVAL '90 days'
+  GROUP BY user_id
+)
+SELECT u.id,
+       h.total_amount,
+       CASE WHEN h.total_amount > 10000 THEN 'vip' ELSE 'regular' END AS segment
+FROM users u
+JOIN heavy h ON h.user_id = u.id
+WHERE h.total_amount > 500;
+```
+
+### Recursive CTEs
+
+Recursive CTEs solve hierarchical and graph traversal problems.
+
+Structure:
+1. **Anchor query** (base rows)
+2. `UNION ALL`
+3. **Recursive query** (references the CTE itself)
+4. Iterates until no new rows are produced
+
+```sql
 WITH RECURSIVE org_tree AS (
-  -- Base case: top-level managers
-  SELECT id, name, manager_id, 0 AS depth, ARRAY[name] AS path
+  -- Anchor: roots
+  SELECT id, name, manager_id, 0 AS depth, ARRAY[id] AS path_ids
   FROM employees
   WHERE manager_id IS NULL
 
   UNION ALL
 
-  -- Recursive step
-  SELECT e.id, e.name, e.manager_id, t.depth + 1, t.path || e.name
+  -- Recursive member: children
+  SELECT e.id,
+         e.name,
+         e.manager_id,
+         t.depth + 1,
+         t.path_ids || e.id
   FROM employees e
   JOIN org_tree t ON e.manager_id = t.id
-  WHERE t.depth < 10  -- safety limit to prevent infinite recursion
+  WHERE t.depth < 20
+    AND NOT (e.id = ANY(t.path_ids))  -- cycle guard
 )
-SELECT * FROM org_tree ORDER BY path;
+SELECT id, name, manager_id, depth, path_ids
+FROM org_tree
+ORDER BY path_ids;
+```
+
+### Cycle Detection and Safety
+
+Recursive mistakes can cause runaway queries. Protect yourself with:
+
+- A max depth guard (`WHERE depth < N`)
+- Cycle detection (`NOT id = ANY(path_ids)`)
+- Sensible `statement_timeout`
+
+```sql
+SET statement_timeout = '10s';
+```
+
+### Practical Recursive Patterns
+
+```sql
+-- Category descendants from a given node
+WITH RECURSIVE cat_tree AS (
+  SELECT id, parent_id, name, 0 AS depth
+  FROM categories
+  WHERE id = 42
+
+  UNION ALL
+
+  SELECT c.id, c.parent_id, c.name, t.depth + 1
+  FROM categories c
+  JOIN cat_tree t ON c.parent_id = t.id
+)
+SELECT * FROM cat_tree ORDER BY depth, id;
+```
+
+```sql
+-- Bill of materials explosion
+WITH RECURSIVE bom AS (
+  SELECT parent_part_id, child_part_id, qty, qty::numeric AS cumulative_qty
+  FROM part_components
+  WHERE parent_part_id = 100
+
+  UNION ALL
+
+  SELECT pc.parent_part_id,
+         pc.child_part_id,
+         pc.qty,
+         b.cumulative_qty * pc.qty
+  FROM part_components pc
+  JOIN bom b ON pc.parent_part_id = b.child_part_id
+)
+SELECT child_part_id, SUM(cumulative_qty) AS total_required
+FROM bom
+GROUP BY child_part_id
+ORDER BY child_part_id;
 ```
 
 ### Writable CTEs
 
-CTEs can contain `INSERT`, `UPDATE`, `DELETE` — useful for complex data manipulation:
+Writable CTEs allow multi-step data modifications in one statement.
 
 ```sql
--- Archive and delete in one statement
-WITH archived AS (
+-- Move cancelled orders to archive atomically
+WITH moved AS (
   DELETE FROM orders
-  WHERE status = 'cancelled' AND created_at < NOW() - INTERVAL '1 year'
+  WHERE status = 'cancelled'
+    AND created_at < NOW() - INTERVAL '1 year'
   RETURNING *
 )
-INSERT INTO orders_archive SELECT * FROM archived;
-
--- Upsert with returning
-WITH new_data AS (
-  INSERT INTO users (email, name) VALUES ('alice@example.com', 'Alice')
-  ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name
-  RETURNING id, email
-)
-SELECT * FROM new_data;
+INSERT INTO orders_archive
+SELECT * FROM moved;
 ```
+
+```sql
+-- Update and audit in one statement
+WITH updated AS (
+  UPDATE subscriptions
+  SET status = 'expired'
+  WHERE expires_at < NOW()
+    AND status <> 'expired'
+  RETURNING id, user_id, status, expires_at
+)
+INSERT INTO subscription_audit (subscription_id, user_id, event_type, event_at)
+SELECT id, user_id, 'auto_expire', NOW()
+FROM updated;
+```
+
+### CTEs with RETURNING for API Workflows
+
+```sql
+WITH created AS (
+  INSERT INTO projects (name, owner_id)
+  VALUES ('QueryViz', 7)
+  RETURNING id, name, owner_id, created_at
+)
+SELECT c.*, u.email AS owner_email
+FROM created c
+JOIN users u ON u.id = c.owner_id;
+```
+
+This is great for application endpoints that need to write and immediately return a rich response payload.
+
+### Debugging and Tuning CTE Queries
+
+```sql
+EXPLAIN (ANALYZE, BUFFERS, VERBOSE)
+WITH candidate_users AS (
+  SELECT id
+  FROM users
+  WHERE created_at >= NOW() - INTERVAL '30 days'
+)
+SELECT COUNT(*)
+FROM candidate_users cu
+JOIN events e ON e.user_id = cu.id;
+```
+
+What to check:
+- Are filters pushed down into base table scans?
+- Is the CTE scanned repeatedly in an inefficient way?
+- Would `MATERIALIZED` or `NOT MATERIALIZED` improve the plan?
+- Are indexes available for join/filter columns used inside CTE blocks?
+
+### Common Pitfalls
+
+- Treating CTEs as always materialized (not true since PG12).
+- Overusing CTE layers for trivial queries (can reduce clarity).
+- Missing cycle protection in recursive queries.
+- Using `UNION` instead of `UNION ALL` in recursion without realizing dedup cost.
+- Assuming row order inside a CTE is preserved without an outer `ORDER BY`.
+
+### Best Practices
+
+- Name CTEs by intent (`recent_orders`, `deduped_events`, `eligible_users`).
+- Keep each CTE focused on one transformation step.
+- Use recursion only when modeling true hierarchy/graph traversal.
+- Add explicit safety guards (`depth`, cycle checks, timeout) for recursive queries.
+- Profile with `EXPLAIN ANALYZE` before and after `MATERIALIZED` changes.
+- Favor correctness/readability first, then optimize with plan evidence.
 
 ---
 
