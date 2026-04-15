@@ -66,19 +66,23 @@ export async function comparePlans(planA: string, planB: string) {
 }
 
 export async function explainNode(nodeType: string): Promise<string> {
-  try {
-    const response = await api.post('/analyze/explain-node', { nodeType });
-    return response.data.explanation;
-  } catch (error: any) {
-    console.warn(`[API] Failed to explain node "${nodeType}":`, error.message);
-    
-    // Graceful degradation - return a basic explanation if API fails
-    if (error.response?.status >= 500 || error.code === 'ECONNABORTED') {
+  return cachedCall(cacheKey('explain-node', nodeType.toLowerCase()), async () => {
+    try {
+      const response = await api.post('/analyze/explain-node', { nodeType });
+      return response.data.explanation as string;
+    } catch (error: any) {
+      console.warn(`[API] Failed to explain node "${nodeType}":`, error.message);
+      if (error.response?.status >= 500 || error.code === 'ECONNABORTED') {
+        throw new Error('retryable');
+      }
+      throw new Error(error.response?.data?.error || 'Failed to explain node');
+    }
+  }).catch((e) => {
+    if (e.message === 'retryable') {
       return `${nodeType}: A PostgreSQL execution plan operation. Click again to retry loading full explanation.`;
     }
-    
-    throw new Error(error.response?.data?.error || 'Failed to explain node');
-  }
+    throw e;
+  });
 }
 
 export interface SectionSummary {
@@ -92,12 +96,14 @@ export async function summarizeSection(
   sectionTitle: string,
   sectionContent: string,
 ): Promise<SectionSummary> {
-  try {
-    const response = await api.post('/learn/summary', { sectionId, sectionTitle, sectionContent });
-    return response.data;
-  } catch (error: any) {
-    throw new Error(error.response?.data?.error || 'Failed to summarize section');
-  }
+  return cachedCall(cacheKey('summary', sectionTitle, sectionContent), async () => {
+    try {
+      const response = await api.post('/learn/summary', { sectionId, sectionTitle, sectionContent });
+      return response.data as SectionSummary;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.error || 'Failed to summarize section');
+    }
+  });
 }
 
 export async function askAboutSection(
@@ -105,21 +111,25 @@ export async function askAboutSection(
   sectionContent: string,
   question: string,
 ): Promise<string> {
-  try {
-    const response = await api.post('/learn/ask', { sectionTitle, sectionContent, question });
-    return response.data.answer;
-  } catch (error: any) {
-    throw new Error(error.response?.data?.error || 'Failed to answer question');
-  }
+  return cachedCall(cacheKey('ask', sectionTitle, sectionContent, question.trim().toLowerCase()), async () => {
+    try {
+      const response = await api.post('/learn/ask', { sectionTitle, sectionContent, question });
+      return response.data.answer as string;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.error || 'Failed to answer question');
+    }
+  });
 }
 
 export async function explainTerm(term: string, sectionTitle?: string): Promise<string> {
-  try {
-    const response = await api.post('/learn/term', { term, sectionTitle });
-    return response.data.explanation;
-  } catch (error: any) {
-    throw new Error(error.response?.data?.error || 'Failed to explain term');
-  }
+  return cachedCall(cacheKey('term', term.toLowerCase().trim()), async () => {
+    try {
+      const response = await api.post('/learn/term', { term, sectionTitle });
+      return response.data.explanation as string;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.error || 'Failed to explain term');
+    }
+  });
 }
 
 // ─── Quiz / sandbox / flashcards ─────────────────────────────────────────────
@@ -136,12 +146,14 @@ export async function generateQuiz(
   sectionTitle: string,
   sectionContent: string,
 ): Promise<QuizQuestion[]> {
-  try {
-    const response = await api.post('/learn/quiz', { sectionId, sectionTitle, sectionContent });
-    return response.data.questions;
-  } catch (error: any) {
-    throw new Error(error.response?.data?.error || 'Failed to generate quiz');
-  }
+  return cachedCall(cacheKey('quiz', sectionTitle, sectionContent), async () => {
+    try {
+      const response = await api.post('/learn/quiz', { sectionId, sectionTitle, sectionContent });
+      return response.data.questions as QuizQuestion[];
+    } catch (error: any) {
+      throw new Error(error.response?.data?.error || 'Failed to generate quiz');
+    }
+  });
 }
 
 export interface PracticeScenario {
@@ -156,12 +168,14 @@ export async function generateScenario(
   sectionTitle: string,
   sectionContent: string,
 ): Promise<PracticeScenario> {
-  try {
-    const response = await api.post('/learn/practice/scenario', { sectionId, sectionTitle, sectionContent });
-    return response.data.scenario;
-  } catch (error: any) {
-    throw new Error(error.response?.data?.error || 'Failed to generate scenario');
-  }
+  return cachedCall(cacheKey('scenario', sectionTitle, sectionContent), async () => {
+    try {
+      const response = await api.post('/learn/practice/scenario', { sectionId, sectionTitle, sectionContent });
+      return response.data.scenario as PracticeScenario;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.error || 'Failed to generate scenario');
+    }
+  });
 }
 
 export interface PracticeGrade {
@@ -172,12 +186,14 @@ export interface PracticeGrade {
 }
 
 export async function gradeSqlAttempt(scenario: PracticeScenario, attempt: string): Promise<PracticeGrade> {
-  try {
-    const response = await api.post('/learn/practice/grade', { scenario, attempt });
-    return response.data;
-  } catch (error: any) {
-    throw new Error(error.response?.data?.error || 'Failed to grade attempt');
-  }
+  return cachedCall(cacheKey('grade', scenario.task, attempt.trim()), async () => {
+    try {
+      const response = await api.post('/learn/practice/grade', { scenario, attempt });
+      return response.data as PracticeGrade;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.error || 'Failed to grade attempt');
+    }
+  });
 }
 
 export interface Flashcard {
@@ -190,12 +206,14 @@ export async function generateFlashcards(
   sectionTitle: string,
   sectionContent: string,
 ): Promise<Flashcard[]> {
-  try {
-    const response = await api.post('/learn/flashcards', { sectionId, sectionTitle, sectionContent });
-    return response.data.cards;
-  } catch (error: any) {
-    throw new Error(error.response?.data?.error || 'Failed to generate flashcards');
-  }
+  return cachedCall(cacheKey('flashcards', sectionTitle, sectionContent), async () => {
+    try {
+      const response = await api.post('/learn/flashcards', { sectionId, sectionTitle, sectionContent });
+      return response.data.cards as Flashcard[];
+    } catch (error: any) {
+      throw new Error(error.response?.data?.error || 'Failed to generate flashcards');
+    }
+  });
 }
 
 export default api;
