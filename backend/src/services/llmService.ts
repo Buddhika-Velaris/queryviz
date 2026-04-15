@@ -57,20 +57,72 @@ export interface ComparisonAnalysis {
 
 // ─── JSON extraction helper ───────────────────────────────────────────────────
 
+function tryParse(raw: string): any | null {
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
+// Best-effort repair for truncated JSON — close open strings, arrays, and objects
+function repairTruncatedJSON(raw: string): string {
+  let s = raw.trim();
+
+  // Strip trailing garbage after last structural character
+  const lastBrace = Math.max(s.lastIndexOf('}'), s.lastIndexOf(']'));
+  if (lastBrace < s.length - 1 && lastBrace !== -1) {
+    // Keep everything up to lastBrace then attempt repair below
+  }
+
+  // Walk the string tracking string/escape state and bracket depth
+  let inString = false;
+  let escape = false;
+  const stack: string[] = [];
+
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (escape) { escape = false; continue; }
+    if (c === '\\' && inString) { escape = true; continue; }
+    if (c === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (c === '{' || c === '[') stack.push(c);
+    else if (c === '}' && stack[stack.length - 1] === '{') stack.pop();
+    else if (c === ']' && stack[stack.length - 1] === '[') stack.pop();
+  }
+
+  if (inString) s += '"';
+  // Strip trailing comma before closing
+  s = s.replace(/,\s*$/, '');
+  while (stack.length) {
+    const open = stack.pop();
+    s += open === '{' ? '}' : ']';
+  }
+  return s;
+}
+
 function extractJSON(text: string): any {
-  try {
-    return JSON.parse(text);
-  } catch {}
+  const direct = tryParse(text);
+  if (direct !== null) return direct;
 
   const codeBlock = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
   if (codeBlock) {
-    try { return JSON.parse(codeBlock[1]); } catch {}
+    const parsed = tryParse(codeBlock[1]);
+    if (parsed !== null) return parsed;
   }
 
   const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start !== -1 && end > start) {
-    try { return JSON.parse(text.substring(start, end + 1)); } catch {}
+  if (start !== -1) {
+    const end = text.lastIndexOf('}');
+    if (end > start) {
+      const parsed = tryParse(text.substring(start, end + 1));
+      if (parsed !== null) return parsed;
+    }
+
+    // Truncation repair — take from first { and close open structures
+    const slice = text.substring(start);
+    const repaired = repairTruncatedJSON(slice);
+    const parsed = tryParse(repaired);
+    if (parsed !== null) {
+      console.warn('[llm] Recovered JSON via truncation repair');
+      return parsed;
+    }
   }
 
   throw new Error('Could not extract valid JSON from LLM response');
@@ -241,11 +293,23 @@ Below are the authoritative PostgreSQL best-practice reference sections you MUST
 
 ${knowledgeBlock}
 
-Using only the above reference material, analyse the submitted DDL and return exactly this JSON structure:
+Using only the above reference material, analyse the submitted DDL and return exactly this JSON structure.
+IMPORTANT — emit keys in EXACTLY this order. correctedSchema and suggestedReadings come BEFORE the long findings/recommendations arrays so they are never dropped under any output budget.
+
 {
   "overallScore": <integer 1-10>,
   "scoreLabel": <"Excellent"|"Good"|"Fair"|"Poor"|"Critical">,
   "designSummary": "<2-3 sentences: what the schema does, overall quality, and the primary issue>",
+  "summary": "<1-2 sentences: the single most impactful change to make>",
+  "correctedSchema": "<MANDATORY. The user's FULL DDL rewritten with every issue fixed — preserve comments, formatting style, and all original objects. This is a drop-in replacement. Never empty, never omitted. If the schema is already perfect, return it verbatim.>",
+  "suggestedReadings": [
+    {
+      "sectionRef": "<e.g. §7>",
+      "number": <integer section number>,
+      "title": "<exact section title from the reference material>",
+      "reason": "<one sentence: why this section is relevant to the submitted schema>"
+    }
+  ],
   "findings": [
     {
       "severity": <"critical"|"warning"|"info"|"success">,
@@ -260,25 +324,15 @@ Using only the above reference material, analyse the submitted DDL and return ex
       "title": "<max 8 words>",
       "description": "<2-4 sentences: exact problem, why it matters, what to change — no SQL here>"
     }
-  ],
-  "correctedSchema": "<the user's FULL DDL rewritten with every issue fixed — preserve comments, formatting style, and all original objects; this is a drop-in replacement for the submitted SQL>",
-  "suggestedReadings": [
-    {
-      "sectionRef": "<e.g. §7>",
-      "number": <integer section number>,
-      "title": "<exact section title from the reference material>",
-      "reason": "<one sentence: why this section is relevant to the submitted schema>"
-    }
-  ],
-  "summary": "<1-2 sentences: the single most impactful change to make>"
+  ]
 }
 
 Rules:
 - Scoring: 1-2→Critical, 3-4→Poor, 5-6→Fair, 7-8→Good, 9-10→Excellent
 - Order findings by severity descending (critical first)
 - Order recommendations by priority descending (high first)
-- correctedSchema must be complete runnable SQL — never truncate it
-- suggestedReadings: only include sections that are genuinely relevant (2–5 items max)
+- correctedSchema is MANDATORY and must be complete runnable SQL — never truncate, never empty, never null
+- suggestedReadings: MANDATORY, 2–5 genuinely relevant sections
 - Be specific: reference actual table names, column names, and constraint names from the SQL
 
 CONTEXT-AWARE INTEGER TYPE JUDGEMENT (override the blanket BIGINT rule when appropriate):
@@ -322,13 +376,38 @@ However, apply graduated judgement based on the apparent table purpose. Infer pu
       ],
       temperature: 0.2,
       max_completion_tokens: 16000,
+      response_format: { type: 'json_object' },
       // Stable prefix (system prompt + knowledge block) is auto-cached by OpenAI
       // when >=1024 tokens. `user` routes identical prefixes to the same cache shard.
       user: 'schema-validator-v1',
     });
 
-    const content = response.choices[0]?.message?.content || '';
-    return extractJSON(content) as SchemaValidationResult;
+    const choice = response.choices[0];
+    const content = choice?.message?.content || '';
+    const finish = choice?.finish_reason;
+
+    console.log('[llm] schema validate:', {
+      finish_reason: finish,
+      usage: response.usage,
+      content_length: content.length,
+    });
+
+    if (!content) {
+      throw new Error(`LLM returned empty content (finish_reason: ${finish})`);
+    }
+    if (finish === 'length') {
+      console.warn('[llm] Response hit token limit — attempting JSON repair');
+    }
+
+    try {
+      return extractJSON(content) as SchemaValidationResult;
+    } catch (parseErr) {
+      console.error('[llm] Raw content that failed to parse (first 2000 chars):');
+      console.error(content.slice(0, 2000));
+      console.error('[llm] ...last 500 chars:');
+      console.error(content.slice(-500));
+      throw parseErr;
+    }
   } catch (error: any) {
     console.error('OpenAI API error:', error);
     throw new Error(`Schema validation failed: ${error.message}`);

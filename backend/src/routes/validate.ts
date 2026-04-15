@@ -43,11 +43,13 @@ router.post('/schema', async (req: Request<{}, {}, ValidateSchemaRequest>, res: 
       ? userContext.trim().slice(0, MAX_CONTEXT_SIZE)
       : undefined;
 
-    // Context changes the analysis — don't serve a context-free cached result
+    // Context changes the analysis — don't serve a context-free cached result.
+    // Bump the namespace suffix when the prompt/response shape changes to invalidate stale entries.
+    const PROMPT_VERSION = 'v2';
     const cacheKeySuffix = context ? `${trimmed}::ctx::${context}` : trimmed;
-    const key = hashKey('schema-validate', cacheKeySuffix);
+    const key = hashKey(`schema-validate-${PROMPT_VERSION}`, cacheKeySuffix);
     const { value, cached } = await getOrCompute(
-      'schema-validate',
+      `schema-validate-${PROMPT_VERSION}`,
       key,
       () => validateSchemaSQL(trimmed, context),
     );
