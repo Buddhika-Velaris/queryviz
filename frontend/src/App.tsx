@@ -4,6 +4,7 @@ import Home from './pages/Home';
 import SingleAnalysis from './pages/SingleAnalysis';
 import Comparison from './pages/Comparison';
 import Learn from './pages/Learn';
+import Guide from './pages/Guide';
 
 function App() {
   return (
@@ -13,6 +14,7 @@ function App() {
         <Route path="/analyze" element={<SingleAnalysis />} />
         <Route path="/compare" element={<Comparison />} />
         <Route path="/learn" element={<Learn />} />
+        <Route path="/guide" element={<Guide />} />
       </Routes>
     </Layout>
   );
