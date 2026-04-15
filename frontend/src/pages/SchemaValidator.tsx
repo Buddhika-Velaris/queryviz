@@ -26,6 +26,7 @@ import {
   SchemaRecommendation,
   SuggestedReading,
 } from '../services/api';
+import { useAnalysisStore } from '../store/analysisStore';
 
 // ─── Severity / priority config (same tokens as LLMAnalysis) ─────────────────
 
@@ -100,25 +101,6 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
       <span className="text-xs font-bold tracking-widest text-gray-400 uppercase">{children}</span>
       <div className="flex-1 h-px bg-gray-700" />
     </div>
-  );
-}
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-  return (
-    <button
-      onClick={handleCopy}
-      type="button"
-      className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 hover:text-white transition-colors"
-    >
-      {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-      {copied ? 'Copied' : 'Copy'}
-    </button>
   );
 }
 
@@ -351,40 +333,29 @@ CREATE TABLE IF NOT EXISTS public.task_status_config (
 );`;
 
 export default function SchemaValidator() {
-  const [sql, setSql] = useState('');
-  const [userContext, setUserContext] = useState('');
-  const [contextOpen, setContextOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<SchemaValidationResult | null>(null);
-  const [cached, setCached] = useState(false);
+  const { schemaValidation, setSchemaValidation, clearSchemaValidation } = useAnalysisStore();
+  const { sql, userContext, result, cached, error, loading } = schemaValidation;
+
+  const [contextOpen, setContextOpen] = useState(() => schemaValidation.userContext.length > 0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleValidate = async () => {
     const trimmed = sql.trim();
     if (!trimmed) return;
 
-    setLoading(true);
-    setError(null);
-    setResult(null);
+    setSchemaValidation({ loading: true, error: null, result: null, cached: false });
 
     try {
       const data = await validateSchema(trimmed, userContext.trim() || undefined);
-      setResult(data.result);
-      setCached(data.cached);
+      setSchemaValidation({ result: data.result, cached: data.cached, loading: false });
     } catch (err: any) {
-      setError(err.message || 'Failed to validate schema');
-    } finally {
-      setLoading(false);
+      setSchemaValidation({ error: err.message || 'Failed to validate schema', loading: false });
     }
   };
 
   const handleClear = () => {
-    setSql('');
-    setUserContext('');
+    clearSchemaValidation();
     setContextOpen(false);
-    setResult(null);
-    setError(null);
     textareaRef.current?.focus();
   };
 
@@ -458,7 +429,7 @@ export default function SchemaValidator() {
         <textarea
           ref={textareaRef}
           value={sql}
-          onChange={(e) => setSql(e.target.value)}
+          onChange={(e) => setSchemaValidation({ sql: e.target.value })}
           placeholder={PLACEHOLDER}
           rows={16}
           spellCheck={false}
@@ -494,7 +465,7 @@ export default function SchemaValidator() {
           <div className="border-t border-gray-700">
             <textarea
               value={userContext}
-              onChange={(e) => setUserContext(e.target.value)}
+              onChange={(e) => setSchemaValidation({ userContext: e.target.value })}
               placeholder={`e.g. "task_status_config is a lookup table with at most ~30 rows. task_v2 is a high-volume transactional table with ~800M rows. We use INTEGER PKs on all lookup tables for storage reasons."`}
               rows={4}
               maxLength={2000}
