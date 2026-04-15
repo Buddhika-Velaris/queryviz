@@ -1,31 +1,36 @@
-import { useState } from 'react';
 import JsonInput from '../components/JsonInput';
 import PlanVisualization from '../components/PlanVisualization';
 import MetricsSummary from '../components/MetricsSummary';
 import LLMAnalysis from '../components/LLMAnalysis';
 import { analyzeSinglePlan } from '../services/api';
-import { Terminal, CheckCircle2, AlertCircle, BookOpen, ArrowRight } from 'lucide-react';
+import { Terminal, CheckCircle2, AlertCircle, Trash2, BookOpen, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { recommendSectionsForPlan, saveLatestPlan, learnHref } from '../lib/sectionMap';
+import { useAnalysisStore } from '../store/analysisStore';
 
 export default function SingleAnalysis() {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<any>(null);
+  const {
+    singleResult: result,
+    singleError: error,
+    singleLoading: loading,
+    setSingleResult,
+    setSingleError,
+    setSingleLoading,
+    clearSingle,
+  } = useAnalysisStore();
 
   const handleAnalyze = async (jsonInput: string) => {
-    setLoading(true);
-    setError(null);
-    setResult(null);
+    setSingleLoading(true);
+    setSingleError(null);
 
     try {
       const data = await analyzeSinglePlan(jsonInput);
-      setResult(data);
+      setSingleResult(data);
       saveLatestPlan(data.plan, data.metrics);
     } catch (err: any) {
-      setError(err.message || 'Failed to analyze query plan');
+      setSingleError(err.message || 'Failed to analyze query plan');
     } finally {
-      setLoading(false);
+      setSingleLoading(false);
     }
   };
 
@@ -78,14 +83,23 @@ export default function SingleAnalysis() {
       {result && (
         <div className="mt-8 space-y-6">
           {/* Success banner */}
-          <div className="flex gap-3 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+          <div className="flex items-start gap-3 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
             <CheckCircle2 size={16} className="text-emerald-400 flex-shrink-0 mt-0.5" />
-            <div>
+            <div className="flex-1">
               <p className="text-emerald-300 text-sm font-medium">Analysis complete</p>
               <p className="text-emerald-400/70 text-xs mt-0.5">
                 Review the metrics, explore the execution tree, then read the AI recommendations below.
               </p>
             </div>
+            <button
+              type="button"
+              onClick={clearSingle}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-red-400 hover:bg-red-500/10 border border-gray-700 hover:border-red-500/30 transition-colors flex-shrink-0"
+              title="Clear results"
+            >
+              <Trash2 size={12} />
+              Clear
+            </button>
           </div>
 
           <MetricsSummary metrics={result.metrics} />

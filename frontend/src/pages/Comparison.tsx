@@ -4,29 +4,35 @@ import MetricsSummary from '../components/MetricsSummary';
 import PlanVisualization from '../components/PlanVisualization';
 import LLMAnalysis from '../components/LLMAnalysis';
 import { comparePlans } from '../services/api';
-import { AlertCircle, Lightbulb } from 'lucide-react';
+import { AlertCircle, Lightbulb, Trash2 } from 'lucide-react';
+import { useAnalysisStore } from '../store/analysisStore';
 
 type ActivePlan = 'A' | 'B';
 
 export default function Comparison() {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<any>(null);
+  const {
+    comparisonResult: result,
+    comparisonError: error,
+    comparisonLoading: loading,
+    setComparisonResult,
+    setComparisonError,
+    setComparisonLoading,
+    clearComparison,
+  } = useAnalysisStore();
   const [activePlan, setActivePlan] = useState<ActivePlan>('A');
 
   const handleCompare = async (planA: string, planB: string) => {
-    setLoading(true);
-    setError(null);
-    setResult(null);
+    setComparisonLoading(true);
+    setComparisonError(null);
 
     try {
       const data = await comparePlans(planA, planB);
-      setResult(data);
+      setComparisonResult(data);
       setActivePlan('A');
     } catch (err: any) {
-      setError(err.message || 'Failed to compare query plans');
+      setComparisonError(err.message || 'Failed to compare query plans');
     } finally {
-      setLoading(false);
+      setComparisonLoading(false);
     }
   };
 
@@ -69,6 +75,18 @@ export default function Comparison() {
 
       {result && (
         <div className="mt-8 space-y-6">
+          {/* Clear button row */}
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={clearComparison}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-red-400 hover:bg-red-500/10 border border-gray-700 hover:border-red-500/30 transition-colors"
+              title="Clear results"
+            >
+              <Trash2 size={12} />
+              Clear results
+            </button>
+          </div>
           {/* AI comparison report */}
           <LLMAnalysis analysis={result.comparison} title="AI-Powered Comparison Report" />
 
