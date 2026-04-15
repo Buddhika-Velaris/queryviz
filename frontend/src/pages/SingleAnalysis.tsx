@@ -4,7 +4,9 @@ import PlanVisualization from '../components/PlanVisualization';
 import MetricsSummary from '../components/MetricsSummary';
 import LLMAnalysis from '../components/LLMAnalysis';
 import { analyzeSinglePlan } from '../services/api';
-import { Terminal, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Terminal, CheckCircle2, AlertCircle, BookOpen, ArrowRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { recommendSectionsForPlan, saveLatestPlan, learnHref } from '../lib/sectionMap';
 
 export default function SingleAnalysis() {
   const [loading, setLoading] = useState(false);
@@ -19,6 +21,7 @@ export default function SingleAnalysis() {
     try {
       const data = await analyzeSinglePlan(jsonInput);
       setResult(data);
+      saveLatestPlan(data.plan, data.metrics);
     } catch (err: any) {
       setError(err.message || 'Failed to analyze query plan');
     } finally {
@@ -88,8 +91,44 @@ export default function SingleAnalysis() {
           <MetricsSummary metrics={result.metrics} />
           <PlanVisualization plan={result.plan} />
           <LLMAnalysis analysis={result.analysis} title="AI Performance Analysis & Recommendations" />
+          <RecommendedReading plan={result.plan} />
         </div>
       )}
+    </div>
+  );
+}
+
+function RecommendedReading({ plan }: { plan: any }) {
+  const recs = recommendSectionsForPlan(plan);
+  if (recs.length === 0) return null;
+
+  return (
+    <div className="rounded-xl border border-blue-500/25 bg-gradient-to-br from-blue-500/5 to-indigo-500/5 p-5">
+      <div className="flex items-center gap-2 mb-3">
+        <BookOpen size={14} className="text-blue-400" />
+        <h3 className="text-sm font-semibold text-gray-100">Recommended reading</h3>
+        <span className="text-[11px] text-gray-500">— based on the operators in your plan</span>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {recs.map(r => (
+          <Link
+            key={r.number}
+            to={learnHref(r.number)}
+            className="group flex items-start gap-3 p-3 rounded-lg bg-gray-800/60 border border-gray-700/60 hover:border-blue-500/50 hover:bg-gray-800 transition-colors"
+          >
+            <span className="text-[10px] font-mono font-black text-gray-500 group-hover:text-blue-400 tabular-nums mt-0.5">
+              §{r.number.toString().padStart(2, '0')}
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-200 group-hover:text-white truncate">{r.title}</p>
+              <p className="text-[11px] text-gray-500 truncate mt-0.5">
+                Triggered by: {r.reasons.slice(0, 3).join(', ')}
+              </p>
+            </div>
+            <ArrowRight size={14} className="text-gray-600 group-hover:text-blue-400 flex-shrink-0 mt-1" />
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }

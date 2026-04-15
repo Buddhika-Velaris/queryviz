@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { analyzeSinglePlan, comparePlans, explainNode } from '../services/llmService.js';
 import { extractPlanMetrics } from '../utils/planParser.js';
+import { getOrCompute, hashKey } from '../services/cache.js';
 
 const router = Router();
 
@@ -194,12 +195,16 @@ router.post('/explain-node', async (req: Request<{}, {}, ExplainNodeRequest>, re
       });
     }
 
-    const explanation = await explainNode(nodeType.trim());
+    const trimmed = nodeType.trim();
+    const key = hashKey('explain-node', trimmed.toLowerCase());
+    const { value, cached } = await getOrCompute(
+      'explain-node', key, () => explainNode(trimmed),
+    );
 
-    res.json({ 
-      explanation,
-      nodeType: nodeType.trim(),
-      cached: true // Will be set by the service
+    res.json({
+      explanation: value,
+      nodeType: trimmed,
+      cached,
     });
   } catch (error: any) {
     console.error('Error explaining node:', error);

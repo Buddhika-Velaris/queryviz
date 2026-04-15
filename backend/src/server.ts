@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import analyzeRouter from './routes/analyze.js';
+import learnRouter from './routes/learn.js';
 
 dotenv.config();
 
@@ -53,6 +54,7 @@ app.get('/health', (req, res) => {
 
 // API routes
 app.use('/api/analyze', analyzeRouter);
+app.use('/api/learn', learnRouter);
 
 // Serve static files from frontend build in production
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

@@ -15,6 +15,9 @@ import '@xyflow/react/dist/style.css';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { explainNode } from '../services/api';
+import { Link } from 'react-router-dom';
+import { BookOpen, ArrowRight } from 'lucide-react';
+import { sectionForNodeType, learnHref } from '../lib/sectionMap';
 
 // ─── Domain types ─────────────────────────────────────────────────────────────
 
@@ -227,12 +230,19 @@ function FlowNode({ data }: NodeProps) {
           borderWidth: isSelected ? 3 : 2,
           borderStyle: 'solid',
         }}
-        className="rounded-xl cursor-pointer select-none px-4 py-3 text-center transition-all hover:brightness-110"
+        className="group relative rounded-xl cursor-pointer select-none px-4 py-3 text-center transition-all hover:brightness-125 hover:scale-[1.03] hover:shadow-lg"
+        title="Click for AI explanation"
       >
+        <div className="absolute top-1.5 right-2 text-[10px] text-white/70 group-hover:text-white flex items-center gap-0.5 pointer-events-none">
+          <span>💡</span>
+        </div>
         <div className="text-white font-bold text-sm leading-snug">{title}</div>
         {subtitle && (
           <div className="text-gray-300 text-xs mt-1 leading-snug opacity-85">{subtitle}</div>
         )}
+        <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-[10px] text-blue-300 whitespace-nowrap pointer-events-none">
+          Click for AI explanation
+        </div>
       </div>
 
       {annotation && (
@@ -391,6 +401,21 @@ export default function PlanFlowchart({ plan }: PlanFlowchartProps) {
                 ✕ Close
               </button>
             </div>
+            {(() => {
+              const learnRef = sectionForNodeType(selectedPlanNode['Node Type']);
+              if (!learnRef) return null;
+              return (
+                <Link
+                  to={learnHref(learnRef.number)}
+                  className="mb-4 flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/30 hover:bg-blue-500/20 text-blue-300 hover:text-blue-200 transition-colors text-xs"
+                >
+                  <BookOpen size={12} />
+                  <span className="font-medium">Learn why:</span>
+                  <span className="opacity-90">§{learnRef.number}. {learnRef.title}</span>
+                  <ArrowRight size={12} className="ml-auto" />
+                </Link>
+              );
+            })()}
             {loadingExpl ? (
               <div className="text-gray-400 text-sm animate-pulse">Loading explanation…</div>
             ) : (

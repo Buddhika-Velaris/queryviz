@@ -1,4 +1,5 @@
 import axios, { AxiosError } from 'axios';
+import { cacheKey, cachedCall } from '../lib/cache';
 
 const API_BASE_URL = '/api';
 
@@ -77,6 +78,123 @@ export async function explainNode(nodeType: string): Promise<string> {
     }
     
     throw new Error(error.response?.data?.error || 'Failed to explain node');
+  }
+}
+
+export interface SectionSummary {
+  tldr: string;
+  takeaways: string[];
+  cached?: boolean;
+}
+
+export async function summarizeSection(
+  sectionId: string,
+  sectionTitle: string,
+  sectionContent: string,
+): Promise<SectionSummary> {
+  try {
+    const response = await api.post('/learn/summary', { sectionId, sectionTitle, sectionContent });
+    return response.data;
+  } catch (error: any) {
+    throw new Error(error.response?.data?.error || 'Failed to summarize section');
+  }
+}
+
+export async function askAboutSection(
+  sectionTitle: string,
+  sectionContent: string,
+  question: string,
+): Promise<string> {
+  try {
+    const response = await api.post('/learn/ask', { sectionTitle, sectionContent, question });
+    return response.data.answer;
+  } catch (error: any) {
+    throw new Error(error.response?.data?.error || 'Failed to answer question');
+  }
+}
+
+export async function explainTerm(term: string, sectionTitle?: string): Promise<string> {
+  try {
+    const response = await api.post('/learn/term', { term, sectionTitle });
+    return response.data.explanation;
+  } catch (error: any) {
+    throw new Error(error.response?.data?.error || 'Failed to explain term');
+  }
+}
+
+// ─── Quiz / sandbox / flashcards ─────────────────────────────────────────────
+
+export interface QuizQuestion {
+  question: string;
+  choices: string[];
+  correctIndex: number;
+  explanation: string;
+}
+
+export async function generateQuiz(
+  sectionId: string,
+  sectionTitle: string,
+  sectionContent: string,
+): Promise<QuizQuestion[]> {
+  try {
+    const response = await api.post('/learn/quiz', { sectionId, sectionTitle, sectionContent });
+    return response.data.questions;
+  } catch (error: any) {
+    throw new Error(error.response?.data?.error || 'Failed to generate quiz');
+  }
+}
+
+export interface PracticeScenario {
+  scenario: string;
+  schema: string;
+  task: string;
+  hints: string[];
+}
+
+export async function generateScenario(
+  sectionId: string,
+  sectionTitle: string,
+  sectionContent: string,
+): Promise<PracticeScenario> {
+  try {
+    const response = await api.post('/learn/practice/scenario', { sectionId, sectionTitle, sectionContent });
+    return response.data.scenario;
+  } catch (error: any) {
+    throw new Error(error.response?.data?.error || 'Failed to generate scenario');
+  }
+}
+
+export interface PracticeGrade {
+  score: number;
+  verdict: 'correct' | 'partial' | 'incorrect';
+  feedback: string;
+  optimalSolution: string;
+}
+
+export async function gradeSqlAttempt(scenario: PracticeScenario, attempt: string): Promise<PracticeGrade> {
+  try {
+    const response = await api.post('/learn/practice/grade', { scenario, attempt });
+    return response.data;
+  } catch (error: any) {
+    throw new Error(error.response?.data?.error || 'Failed to grade attempt');
+  }
+}
+
+export interface Flashcard {
+  front: string;
+  back: string;
+}
+
+export async function generateFlashcards(
+  sectionId: string,
+  sectionTitle: string,
+  sectionContent: string,
+): Promise<Flashcard[]> {
+  try {
+    const response = await api.post('/learn/flashcards', { sectionId, sectionTitle, sectionContent });
+    return response.data.cards;
+  } catch (error: any) {
+    throw new Error(error.response?.data?.error || 'Failed to generate flashcards');
   }
 }
 
