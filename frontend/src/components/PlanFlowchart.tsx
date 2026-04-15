@@ -362,50 +362,63 @@ export default function PlanFlowchart({ plan }: PlanFlowchartProps) {
       </div>
 
       {selectedPlanNode && (
-        <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-gray-100 font-semibold text-sm">
-              💡 AI Explanation:{' '}
-              <span className="text-blue-400">{selectedPlanNode['Node Type']}</span>
-            </h3>
-            <button
-              onClick={() => {
-                setSelectedNodeId(null);
-                setSelectedPlanNode(null);
-                setExplanation(null);
-              }}
-              className="text-gray-500 hover:text-gray-300 text-xs px-2 py-1 rounded hover:bg-gray-700 transition-colors"
-            >
-              ✕ Close
-            </button>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          onClick={() => {
+            setSelectedNodeId(null);
+            setSelectedPlanNode(null);
+            setExplanation(null);
+          }}
+        >
+          <div
+            className="bg-gray-800 rounded-xl border border-gray-700 p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-gray-100 font-semibold text-base">
+                💡 AI Explanation:{' '}
+                <span className="text-blue-400">{selectedPlanNode['Node Type']}</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedNodeId(null);
+                  setSelectedPlanNode(null);
+                  setExplanation(null);
+                }}
+                className="text-gray-500 hover:text-gray-300 text-sm px-2 py-1 rounded hover:bg-gray-700 transition-colors"
+              >
+                ✕ Close
+              </button>
+            </div>
+            {loadingExpl ? (
+              <div className="text-gray-400 text-sm animate-pulse">Loading explanation…</div>
+            ) : (
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                className="prose prose-sm prose-invert max-w-none text-gray-300"
+                components={{
+                  p: ({ children }) => <p className="mb-2 last:mb-0 text-sm">{children}</p>,
+                  strong: ({ children }) => (
+                    <strong className="text-gray-100 font-bold">{children}</strong>
+                  ),
+                  code: ({ children }) => (
+                    <code className="bg-gray-700 px-1 py-0.5 rounded text-blue-300 text-xs">
+                      {children}
+                    </code>
+                  ),
+                  ul: ({ children }) => (
+                    <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>
+                  ),
+                  li: ({ children }) => (
+                    <li className="text-gray-300 text-sm">{children}</li>
+                  ),
+                }}
+              >
+                {explanation ?? ''}
+              </ReactMarkdown>
+            )}
           </div>
-          {loadingExpl ? (
-            <div className="text-gray-400 text-sm animate-pulse">Loading explanation…</div>
-          ) : (
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              className="prose prose-sm prose-invert max-w-none text-gray-300"
-              components={{
-                p: ({ children }) => <p className="mb-2 last:mb-0 text-sm">{children}</p>,
-                strong: ({ children }) => (
-                  <strong className="text-gray-100 font-bold">{children}</strong>
-                ),
-                code: ({ children }) => (
-                  <code className="bg-gray-700 px-1 py-0.5 rounded text-blue-300 text-xs">
-                    {children}
-                  </code>
-                ),
-                ul: ({ children }) => (
-                  <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>
-                ),
-                li: ({ children }) => (
-                  <li className="text-gray-300 text-sm">{children}</li>
-                ),
-              }}
-            >
-              {explanation ?? ''}
-            </ReactMarkdown>
-          )}
         </div>
       )}
     </div>

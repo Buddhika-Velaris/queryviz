@@ -19,7 +19,7 @@ interface PlanVisualizationProps {
 }
 
 export default function PlanVisualization({ plan }: PlanVisualizationProps) {
-  const [viewMode, setViewMode] = useState<'tree' | 'flowchart'>('tree');
+  const [viewMode, setViewMode] = useState<'tree' | 'flowchart'>('flowchart');
   const rootPlan = Array.isArray(plan) ? plan[0]?.Plan : plan.Plan || plan;
   const totalTime = Array.isArray(plan) ? plan[0]?.['Execution Time'] : plan['Execution Time'] || rootPlan['Actual Total Time'] || 100;
 
