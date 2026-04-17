@@ -3,6 +3,7 @@ import {
   BarChart2, ArrowLeftRight, BookOpen, Zap, GitBranch,
   ChevronRight, AlertTriangle, CheckCircle2, Info, Search,
   MessageCircle, FlaskConical, Brain, Layers, ArrowRight,
+  ShieldCheck, Wand2, FileCode,
 } from 'lucide-react';
 
 // ─── Section anchor links ──────────────────────────────────────────────────
@@ -17,6 +18,7 @@ const TOC: TocItem[] = [
   { id: 'single-analysis', label: 'Single query analysis' },
   { id: 'reading-results', label: 'Reading the results' },
   { id: 'compare', label: 'Comparing two plans' },
+  { id: 'schema-validator', label: 'Schema validator' },
   { id: 'learn', label: 'Learn section' },
   { id: 'tips', label: 'Tips & best practices' },
 ];
@@ -139,6 +141,13 @@ export default function Guide() {
               Compare plans
             </Link>
             <Link
+              to="/validate"
+              className="flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300 transition-colors"
+            >
+              <ShieldCheck size={11} />
+              Validate schema
+            </Link>
+            <Link
               to="/learn"
               className="flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
             >
@@ -196,6 +205,13 @@ export default function Guide() {
                   bg: 'bg-purple-500/10 border-purple-500/20',
                   title: 'Plan comparison',
                   desc: 'Paste two plans (before/after adding an index, or two query variants) and see a side-by-side diff with AI commentary on the winner.',
+                },
+                {
+                  icon: ShieldCheck,
+                  color: 'text-amber-400',
+                  bg: 'bg-amber-500/10 border-amber-500/20',
+                  title: 'Schema validator',
+                  desc: 'Paste DDL (CREATE TABLE, ALTER TABLE, indexes, triggers) and get a best-practice review with severity-ranked findings and a drop-in corrected schema.',
                 },
               ].map(({ icon: Icon, color, bg, title, desc }) => (
                 <div key={title} className={`rounded-xl border p-4 ${bg}`}>
@@ -526,6 +542,122 @@ export default function Guide() {
             </Step>
           </section>
 
+          {/* ── Schema Validator ── */}
+          <section>
+            <SectionHeader
+              id="schema-validator"
+              title="Schema validator"
+              subtitle="Paste PostgreSQL DDL and get a best-practice review with a drop-in corrected schema."
+            />
+
+            <p className="text-gray-400 text-sm leading-relaxed mb-6">
+              The <Link to="/validate" className="text-amber-400 hover:text-amber-300 underline">Validate</Link> page
+              reviews raw SQL DDL — <code className="text-amber-300 bg-amber-500/10 px-1.5 py-0.5 rounded font-mono text-xs">CREATE TABLE</code>,
+              <code className="text-amber-300 bg-amber-500/10 px-1.5 py-0.5 rounded font-mono text-xs ml-1">ALTER TABLE</code>,
+              indexes, constraints, triggers, and functions — against an authoritative PostgreSQL
+              best-practice knowledge base. Use it before running a migration to catch design issues early.
+            </p>
+
+            <Callout
+              icon={Info}
+              color="text-amber-300"
+              bg="bg-amber-500/10 border-amber-500/20"
+              title="Context-aware — not just a blanket BIGINT lint"
+            >
+              <p className="text-amber-400/80">
+                The validator infers table purpose from naming and structure. A <code className="font-mono">*_config</code> lookup
+                table keeps its INTEGER PK; a high-growth table like <code className="font-mono">orders</code> gets flagged if
+                it's not BIGINT. Soft-delete flags, timestamp naming, low-cardinality indexes, and FK type mismatches
+                are all caught with the right severity for the table's role.
+              </p>
+            </Callout>
+
+            <Step number={1} title="Paste your DDL">
+              <p className="mb-2">
+                Include everything you want reviewed together — the target table, its indexes, related{' '}
+                <code className="font-mono">ALTER TABLE</code> statements, and any triggers or functions.
+                Schema placeholders like <code className="font-mono">{'{schema}'}</code> are fine.
+              </p>
+              <CodeBlock>{'CREATE TABLE public.orders (\n  order_id    BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n  user_id     BIGINT NOT NULL REFERENCES public.users(user_id),\n  total       NUMERIC(12,2) NOT NULL,\n  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()\n);\n\nCREATE INDEX idx_orders_user_id ON public.orders (user_id);'}</CodeBlock>
+            </Step>
+
+            <Step number={2} title="Add optional context (recommended)">
+              <p>
+                Expand the <strong className="text-gray-200">Context</strong> panel and describe anything
+                the reviewer can't infer from the SQL alone — row-count expectations, multi-tenancy, or
+                existing column types in referenced tables. A one-line hint like
+                {' '}<em className="text-gray-300">"config table, max 20 rows, referenced by a billion-row task_v2"</em>{' '}
+                changes the advice materially.
+              </p>
+            </Step>
+
+            <Step number={3} title="Review the result panels">
+              <p className="mb-2">The response has five sections, in top-to-bottom order:</p>
+              <ul className="list-disc list-inside space-y-1 text-gray-400 text-xs">
+                <li><strong className="text-gray-200">Score + design summary</strong> — 1–10 rating with a one-paragraph verdict.</li>
+                <li><strong className="text-gray-200">Findings</strong> — severity-ranked issues, each citing the exact §section in the knowledge base.</li>
+                <li><strong className="text-gray-200">Recommendations</strong> — prioritized list of what to change and why. Descriptions only, no SQL.</li>
+                <li><strong className="text-emerald-300">Corrected Schema</strong> — the full DDL rewritten with every fix applied. Drop-in replacement, copy-ready.</li>
+                <li><strong className="text-gray-200">Suggested Reading</strong> — 2–5 Learn sections most relevant to your submission, one click away.</li>
+              </ul>
+            </Step>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6 mb-6">
+              {[
+                {
+                  icon: FileCode,
+                  color: 'text-blue-400',
+                  bg: 'bg-blue-500/10 border-blue-500/20',
+                  title: 'What gets checked',
+                  desc: 'PK/FK types and mismatches, SERIAL vs IDENTITY, VARCHAR vs TEXT, TIMESTAMPTZ usage, partial unique indexes, soft-delete patterns, naming conventions, and more.',
+                },
+                {
+                  icon: Wand2,
+                  color: 'text-emerald-400',
+                  bg: 'bg-emerald-500/10 border-emerald-500/20',
+                  title: 'Corrected schema',
+                  desc: 'Every finding is consolidated into one rewritten DDL block you can run as-is. Comments and formatting are preserved; the output is always complete.',
+                },
+                {
+                  icon: BookOpen,
+                  color: 'text-purple-400',
+                  bg: 'bg-purple-500/10 border-purple-500/20',
+                  title: 'Grounded in a knowledge base',
+                  desc: 'Findings reference specific §sections (e.g. §7 Numeric & ID Types, §42 Anti-Patterns). Click through to Learn for the full explanation.',
+                },
+                {
+                  icon: Zap,
+                  color: 'text-amber-400',
+                  bg: 'bg-amber-500/10 border-amber-500/20',
+                  title: 'Dynamic section loading',
+                  desc: 'The validator only loads knowledge sections relevant to your DDL (JSON rules only if you use jsonb, trigger rules only if you define one) — keeping cost and latency low.',
+                },
+              ].map(({ icon: Icon, color, bg, title, desc }) => (
+                <div key={title} className={`rounded-xl border p-4 ${bg}`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Icon size={13} className={color} />
+                    <span className={`text-xs font-semibold ${color}`}>{title}</span>
+                  </div>
+                  <p className="text-gray-500 text-xs leading-relaxed">{desc}</p>
+                </div>
+              ))}
+            </div>
+
+            <Callout
+              icon={AlertTriangle}
+              color="text-amber-300"
+              bg="bg-amber-500/10 border-amber-500/20"
+              title="Best for logical review, not full migration planning"
+            >
+              <p className="text-amber-400/80">
+                The validator reviews DDL design in isolation. It does not know your existing data volume,
+                lock-acquisition risk, or running transactions. For production migrations, use the corrected
+                schema as a blueprint and plan the rollout separately (e.g. <code className="font-mono">ALTER TABLE … NOT VALID</code>,
+                <code className="font-mono ml-1">CONCURRENTLY</code>, batched backfills).
+              </p>
+            </Callout>
+          </section>
+
           {/* ── Learn ── */}
           <section>
             <SectionHeader
@@ -690,6 +822,13 @@ export default function Guide() {
               >
                 <ArrowLeftRight size={15} />
                 Compare two plans
+              </Link>
+              <Link
+                to="/validate"
+                className="flex items-center justify-center gap-2 px-5 py-3 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 text-sm font-semibold rounded-xl transition-colors"
+              >
+                <ShieldCheck size={15} />
+                Validate schema
               </Link>
               <Link
                 to="/learn"
