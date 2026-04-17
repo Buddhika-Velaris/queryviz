@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
+import RequireVelarisAuth from './components/RequireVelarisAuth';
 import Home from './pages/Home';
 import SingleAnalysis from './pages/SingleAnalysis';
 import Comparison from './pages/Comparison';
@@ -12,11 +13,39 @@ function App() {
     <Layout>
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route path="/analyze" element={<SingleAnalysis />} />
-        <Route path="/compare" element={<Comparison />} />
         <Route path="/learn" element={<Learn />} />
-        <Route path="/guide" element={<Guide />} />
-        <Route path="/validate" element={<SchemaValidator />} />
+        <Route
+          path="/analyze"
+          element={
+            <RequireVelarisAuth>
+              <SingleAnalysis />
+            </RequireVelarisAuth>
+          }
+        />
+        <Route
+          path="/compare"
+          element={
+            <RequireVelarisAuth>
+              <Comparison />
+            </RequireVelarisAuth>
+          }
+        />
+        <Route
+          path="/validate"
+          element={
+            <RequireVelarisAuth>
+              <SchemaValidator />
+            </RequireVelarisAuth>
+          }
+        />
+        <Route
+          path="/guide"
+          element={
+            <RequireVelarisAuth>
+              <Guide />
+            </RequireVelarisAuth>
+          }
+        />
       </Routes>
     </Layout>
   );

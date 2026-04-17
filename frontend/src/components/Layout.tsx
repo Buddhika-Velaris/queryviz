@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
-import { BarChart2, ArrowLeftRight, BookOpen, Skull, HelpCircle, ShieldCheck } from 'lucide-react';
+import { BarChart2, ArrowLeftRight, BookOpen, Skull, HelpCircle, ShieldCheck, LogIn } from 'lucide-react';
+import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -115,6 +116,23 @@ export default function Layout({ children }: LayoutProps) {
                 </svg>
                 <span className="hidden sm:inline">GitHub</span>
               </a>
+
+              <div className="w-px h-5 bg-gray-700 mx-1" />
+
+              <SignedOut>
+                <SignInButton mode="modal">
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-500 transition-colors"
+                  >
+                    <LogIn size={14} />
+                    <span>Sign in</span>
+                  </button>
+                </SignInButton>
+              </SignedOut>
+              <SignedIn>
+                <UserButton afterSignOutUrl="/" />
+              </SignedIn>
             </div>
           </div>
         </div>

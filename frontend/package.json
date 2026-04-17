@@ -9,6 +9,7 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@clerk/clerk-react": "^5.61.5",
     "@xyflow/react": "^12.10.2",
     "axios": "^1.7.7",
     "lucide-react": "^1.8.0",

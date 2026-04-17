@@ -3,6 +3,14 @@ import { cacheKey, cachedCall } from '../lib/cache';
 
 const API_BASE_URL = '/api';
 
+type TokenGetter = () => Promise<string | null>;
+
+let getAuthToken: TokenGetter | null = null;
+
+export function setAuthTokenGetter(getter: TokenGetter | null): void {
+  getAuthToken = getter;
+}
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -11,9 +19,19 @@ const api = axios.create({
   timeout: 90000, // 90 second timeout for AI operations
 });
 
-// Request interceptor for logging
+// Request interceptor: attach Clerk session token + log
 api.interceptors.request.use(
-  (config) => {
+  async (config) => {
+    if (getAuthToken) {
+      try {
+        const token = await getAuthToken();
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      } catch {
+        // No token available — request proceeds; backend will 401 if required
+      }
+    }
     console.log(`[API] ${config.method?.toUpperCase()} ${config.url}`);
     return config;
   },
@@ -35,10 +53,18 @@ api.interceptors.response.use(
       throw new Error('Request timeout - AI analysis took too long. Try a simpler query.');
     }
     
+    if (error.response?.status === 401) {
+      throw new Error('Sign in required to use this feature.');
+    }
+
+    if (error.response?.status === 403) {
+      throw new Error('Access restricted to velaris.io accounts.');
+    }
+
     if (error.response?.status === 429) {
       throw new Error('Rate limit exceeded. Please wait a moment and try again.');
     }
-    
+
     if (error.response?.status === 413) {
       throw new Error('Query plan too large. Maximum size is 5MB.');
     }
