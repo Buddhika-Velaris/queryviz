@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { SchemaValidationResult } from '../services/api';
+import type { SchemaValidationResult, QueryGenerationResult } from '../services/api';
 
 interface SingleResult {
   plan: any;
@@ -23,6 +23,13 @@ interface SchemaValidationState {
   loading: boolean;
 }
 
+interface QueryGenState {
+  accessPatterns: string;
+  relatedDdl: string;
+  result: QueryGenerationResult | null;
+  cached: boolean;
+}
+
 interface AnalysisStore {
   singleResult: SingleResult | null;
   singleError: string | null;
@@ -33,6 +40,8 @@ interface AnalysisStore {
   comparisonLoading: boolean;
 
   schemaValidation: SchemaValidationState;
+
+  queryGen: QueryGenState;
 
   setSingleResult: (result: SingleResult) => void;
   setSingleError: (error: string | null) => void;
@@ -46,6 +55,9 @@ interface AnalysisStore {
 
   setSchemaValidation: (patch: Partial<SchemaValidationState>) => void;
   clearSchemaValidation: () => void;
+
+  setQueryGen: (patch: Partial<QueryGenState>) => void;
+  clearQueryGen: () => void;
 }
 
 const INITIAL_SCHEMA_VALIDATION: SchemaValidationState = {
@@ -55,6 +67,13 @@ const INITIAL_SCHEMA_VALIDATION: SchemaValidationState = {
   cached: false,
   error: null,
   loading: false,
+};
+
+const INITIAL_QUERY_GEN: QueryGenState = {
+  accessPatterns: '',
+  relatedDdl: '',
+  result: null,
+  cached: false,
 };
 
 export const useAnalysisStore = create<AnalysisStore>((set) => ({
@@ -67,6 +86,8 @@ export const useAnalysisStore = create<AnalysisStore>((set) => ({
   comparisonLoading: false,
 
   schemaValidation: INITIAL_SCHEMA_VALIDATION,
+
+  queryGen: INITIAL_QUERY_GEN,
 
   setSingleResult: (result) => set({ singleResult: result, singleError: null }),
   setSingleError: (error) => set({ singleError: error }),
@@ -81,4 +102,8 @@ export const useAnalysisStore = create<AnalysisStore>((set) => ({
   setSchemaValidation: (patch) =>
     set((state) => ({ schemaValidation: { ...state.schemaValidation, ...patch } })),
   clearSchemaValidation: () => set({ schemaValidation: INITIAL_SCHEMA_VALIDATION }),
+
+  setQueryGen: (patch) =>
+    set((state) => ({ queryGen: { ...state.queryGen, ...patch } })),
+  clearQueryGen: () => set({ queryGen: INITIAL_QUERY_GEN }),
 }));

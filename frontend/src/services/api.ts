@@ -324,4 +324,81 @@ export async function generateOptimalQueries(
   }
 }
 
+// ─── History ──────────────────────────────────────────────────────────────────
+
+export type HistoryRecordType =
+  | 'single_analysis'
+  | 'comparison'
+  | 'schema_validation'
+  | 'query_generation';
+
+export interface BaseHistoryRecord {
+  _id: string;
+  userId: string;
+  email: string;
+  createdAt: string;
+  recordType: HistoryRecordType;
+}
+
+export interface SingleAnalysisRecord extends BaseHistoryRecord {
+  recordType: 'single_analysis';
+  planJson: object;
+  metrics: object;
+  analysis: object;
+}
+
+export interface ComparisonRecord extends BaseHistoryRecord {
+  recordType: 'comparison';
+  planA: object;
+  planB: object;
+  metricsA: object;
+  metricsB: object;
+  comparison: object;
+  improvement: object;
+}
+
+export interface SchemaValidationRecord extends BaseHistoryRecord {
+  recordType: 'schema_validation';
+  sql: string;
+  userContext?: string;
+  result: SchemaValidationResult;
+}
+
+export interface QueryGenerationRecord extends BaseHistoryRecord {
+  recordType: 'query_generation';
+  primaryDdl: string;
+  accessPatterns: string;
+  relatedDdl?: string;
+  result: QueryGenerationResult;
+}
+
+export type HistoryRecord =
+  | SingleAnalysisRecord
+  | ComparisonRecord
+  | SchemaValidationRecord
+  | QueryGenerationRecord;
+
+export async function getHistory(type?: HistoryRecordType): Promise<HistoryRecord[]> {
+  try {
+    const params = type ? { type } : {};
+    const response = await api.get('/history', { params });
+    return response.data.records as HistoryRecord[];
+  } catch (error: any) {
+    // 503 = DB not yet connected — treat as empty rather than an error
+    if (error.response?.status === 503) return [];
+    throw new Error(error.response?.data?.error || 'Failed to fetch history');
+  }
+}
+
+export async function deleteHistoryRecord(
+  type: HistoryRecordType,
+  id: string,
+): Promise<void> {
+  try {
+    await api.delete(`/history/${type}/${id}`);
+  } catch (error: any) {
+    throw new Error(error.response?.data?.error || 'Failed to delete record');
+  }
+}
+
 export default api;

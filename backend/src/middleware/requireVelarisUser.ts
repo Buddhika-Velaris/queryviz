@@ -28,6 +28,9 @@ export async function requireVelarisUser(
       return;
     }
 
+    // Attach to request so route handlers can save history without re-calling Clerk
+    req.velarisUser = { userId, email: primaryEmail };
+
     next();
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Authentication failed';

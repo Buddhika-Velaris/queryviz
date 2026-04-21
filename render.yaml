@@ -12,5 +12,11 @@ services:
         value: 5000
       - key: OPENAI_API_KEY
         sync: false
+      - key: CLERK_PUBLISHABLE_KEY
+        sync: false
+      - key: CLERK_SECRET_KEY
+        sync: false
+      - key: VITE_CLERK_PUBLISHABLE_KEY
+        sync: false
       - key: FRONTEND_URL
         value: https://queryviz.onrender.com

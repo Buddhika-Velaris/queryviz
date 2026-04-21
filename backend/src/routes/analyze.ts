@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { analyzeSinglePlan, comparePlans, explainNode } from '../services/llmService.js';
 import { extractPlanMetrics } from '../utils/planParser.js';
 import { getOrCompute, hashKey } from '../services/cache.js';
+import { isConnected } from '../services/db.js';
+import { SingleAnalysisModel, PlanComparisonModel } from '../models/history.js';
 
 const router = Router();
 
@@ -89,6 +91,17 @@ router.post('/single', async (req: Request<{}, {}, SinglePlanRequest>, res: Resp
         timestamp: new Date().toISOString(),
       },
     });
+
+    // Fire-and-forget history save (never block response)
+    console.log(`[history] single_analysis — DB connected: ${isConnected()}, user: ${req.velarisUser?.email ?? 'none'}`);
+    if (isConnected() && req.velarisUser) {
+      const { userId, email } = req.velarisUser;
+      SingleAnalysisModel.create({ userId, email, planJson: parsedPlan, metrics, analysis: llmAnalysis })
+        .then((doc) => console.log(`[history] Saved single_analysis id=${doc._id}`))
+        .catch((err: Error) => console.error('[history] FAILED to save single_analysis:', err.message));
+    } else {
+      console.warn(`[history] Skipped single_analysis save — connected=${isConnected()} hasUser=${!!req.velarisUser}`);
+    }
   } catch (error: any) {
     console.error('Error analyzing single plan:', error);
     res.status(500).json({ 
@@ -171,6 +184,22 @@ router.post('/compare', async (req: Request<{}, {}, ComparePlansRequest>, res: R
         timestamp: new Date().toISOString(),
       },
     });
+
+    // Fire-and-forget history save
+    console.log(`[history] comparison — DB connected: ${isConnected()}, user: ${req.velarisUser?.email ?? 'none'}`);
+    if (isConnected() && req.velarisUser) {
+      const { userId, email } = req.velarisUser;
+      PlanComparisonModel.create({
+        userId, email,
+        planA: parsedPlanA, planB: parsedPlanB,
+        metricsA, metricsB,
+        comparison, improvement,
+      })
+        .then((doc) => console.log(`[history] Saved comparison id=${doc._id}`))
+        .catch((err: Error) => console.error('[history] FAILED to save comparison:', err.message));
+    } else {
+      console.warn(`[history] Skipped comparison save — connected=${isConnected()} hasUser=${!!req.velarisUser}`);
+    }
   } catch (error: any) {
     console.error('Error comparing plans:', error);
     res.status(500).json({ 

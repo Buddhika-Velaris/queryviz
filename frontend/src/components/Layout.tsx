@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { BarChart2, ArrowLeftRight, BookOpen, Skull, HelpCircle, ShieldCheck, LogIn } from 'lucide-react';
+import { BarChart2, ArrowLeftRight, BookOpen, Skull, HelpCircle, ShieldCheck, LogIn, Clock } from 'lucide-react';
 import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
 
 interface LayoutProps {
@@ -89,7 +89,17 @@ export default function Layout({ children }: LayoutProps) {
                 <span>Guide</span>
               </Link>
 
-             
+              <Link
+                to="/history"
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  isActive('/history')
+                    ? 'bg-blue-600/20 text-blue-400'
+                    : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800'
+                }`}
+              >
+                <Clock size={14} />
+                <span>History</span>
+              </Link>
 
               <div className="w-px h-5 bg-gray-700 mx-1" />
 

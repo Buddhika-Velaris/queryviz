@@ -423,12 +423,12 @@ const PATTERNS_PLACEHOLDER = `Describe the queries you'll run against this schem
 • Join orders with users to show order totals per customer`;
 
 function QueryGenSection() {
-  const { schemaValidation } = useAnalysisStore();
-  const [accessPatterns, setAccessPatterns] = useState('');
-  const [relatedDdl, setRelatedDdl] = useState('');
-  const [relatedOpen, setRelatedOpen] = useState(false);
-  const [result, setResult] = useState<QueryGenerationResult | null>(null);
-  const [cached, setCached] = useState(false);
+  const { schemaValidation, queryGen, setQueryGen } = useAnalysisStore();
+  const [accessPatterns, setAccessPatterns] = useState(() => queryGen.accessPatterns);
+  const [relatedDdl, setRelatedDdl] = useState(() => queryGen.relatedDdl);
+  const [relatedOpen, setRelatedOpen] = useState(() => queryGen.relatedDdl.length > 0);
+  const [result, setResult] = useState<QueryGenerationResult | null>(() => queryGen.result);
+  const [cached, setCached] = useState(() => queryGen.cached);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -446,6 +446,7 @@ function QueryGenSection() {
       );
       setResult(data.result);
       setCached(data.cached);
+      setQueryGen({ accessPatterns: accessPatterns.trim(), relatedDdl: relatedDdl.trim(), result: data.result, cached: data.cached });
     } catch (err: any) {
       setError(err.message || 'Failed to generate queries');
     } finally {

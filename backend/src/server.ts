@@ -9,7 +9,9 @@ import { clerkMiddleware } from '@clerk/express';
 import analyzeRouter from './routes/analyze.js';
 import learnRouter from './routes/learn.js';
 import validateRouter from './routes/validate.js';
+import historyRouter from './routes/history.js';
 import { requireVelarisUser } from './middleware/requireVelarisUser.js';
+import { connectDB } from './services/db.js';
 
 dotenv.config();
 
@@ -76,6 +78,7 @@ app.get('/health', (req, res) => {
 app.use('/api/learn', requireVelarisUser, learnRouter);
 app.use('/api/analyze', requireVelarisUser, analyzeRouter);
 app.use('/api/validate', requireVelarisUser, validateRouter);
+app.use('/api/history', requireVelarisUser, historyRouter);
 
 // Serve static files from frontend build in production
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -106,6 +109,9 @@ const server = app.listen(PORT, () => {
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔗 Health check: http://localhost:${PORT}/health`);
   console.log('='.repeat(60));
+
+  // Connect to MongoDB (non-blocking — app still serves without DB)
+  connectDB();
 });
 
 // Graceful shutdown

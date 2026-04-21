@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { validateSchemaSQL, generateOptimalQueries } from '../services/llmService.js';
 import { getOrCompute, hashKey } from '../services/cache.js';
+import { isConnected } from '../services/db.js';
+import { SchemaValidationModel, QueryGenerationModel } from '../models/history.js';
 
 const router = Router();
 
@@ -65,6 +67,17 @@ router.post('/schema', async (req: Request<{}, {}, ValidateSchemaRequest>, res: 
         timestamp: new Date().toISOString(),
       },
     });
+
+    // Fire-and-forget history save (skip if result was served from cache)
+    console.log(`[history] schema_validation — cached=${cached}, DB connected: ${isConnected()}, user: ${req.velarisUser?.email ?? 'none'}`);
+    if (!cached && isConnected() && req.velarisUser) {
+      const { userId, email } = req.velarisUser;
+      SchemaValidationModel.create({ userId, email, sql: trimmed, userContext: context, result: value })
+        .then((doc) => console.log(`[history] Saved schema_validation id=${doc._id}`))
+        .catch((err: Error) => console.error('[history] FAILED to save schema_validation:', err.message));
+    } else {
+      console.warn(`[history] Skipped schema_validation save — cached=${cached} connected=${isConnected()} hasUser=${!!req.velarisUser}`);
+    }
   } catch (error: any) {
     console.error('Schema validation error:', error);
     res.status(500).json({
@@ -125,6 +138,23 @@ router.post('/queries', async (req: Request<{}, {}, QueryGenRequest>, res: Respo
       cached,
       metadata: { processingTime, timestamp: new Date().toISOString() },
     });
+
+    // Fire-and-forget history save (skip cache hits)
+    console.log(`[history] query_generation — cached=${cached}, DB connected: ${isConnected()}, user: ${req.velarisUser?.email ?? 'none'}`);
+    if (!cached && isConnected() && req.velarisUser) {
+      const { userId, email } = req.velarisUser;
+      QueryGenerationModel.create({
+        userId, email,
+        primaryDdl: trimmedDdl,
+        accessPatterns: trimmedPatterns,
+        relatedDdl: trimmedRelated,
+        result: value,
+      })
+        .then((doc) => console.log(`[history] Saved query_generation id=${doc._id}`))
+        .catch((err: Error) => console.error('[history] FAILED to save query_generation:', err.message));
+    } else {
+      console.warn(`[history] Skipped query_generation save — cached=${cached} connected=${isConnected()} hasUser=${!!req.velarisUser}`);
+    }
   } catch (error: any) {
     console.error('Query generation error:', error);
     res.status(500).json({

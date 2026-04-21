@@ -7,6 +7,7 @@ import Comparison from './pages/Comparison';
 import Learn from './pages/Learn';
 import Guide from './pages/Guide';
 import SchemaValidator from './pages/SchemaValidator';
+import History from './pages/History';
 
 function App() {
   return (
@@ -43,6 +44,14 @@ function App() {
           element={
             <RequireVelarisAuth>
               <Guide />
+            </RequireVelarisAuth>
+          }
+        />
+        <Route
+          path="/history"
+          element={
+            <RequireVelarisAuth>
+              <History />
             </RequireVelarisAuth>
           }
         />
