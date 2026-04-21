@@ -3,7 +3,10 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 
 // Always loaded — foundational DDL rules that apply to every schema
-const CORE_SECTIONS = [2, 3, 7, 8, 9, 20, 42];
+// §20 Storage Internals (pages, MVCC, HOT updates) — foundational physical context
+// §21 Indexes — Theory & Practice
+// §43 Anti-Patterns — soft-delete, naming, common traps
+const CORE_SECTIONS = [2, 3, 7, 8, 9, 20, 21, 43];
 
 // Loaded only when the submitted SQL contains matching syntax.
 // Patterns are matched against comment-stripped, lowercased SQL.
@@ -41,20 +44,20 @@ const CONDITIONAL_SECTIONS: { section: number; pattern: RegExp }[] = [
   // §19 Full-Text Search
   { section: 19, pattern: /\b(tsvector|tsquery|to_tsvector|to_tsquery|ts_rank)\b/i },
 
-  // §30 Partitioning
-  { section: 30, pattern: /\bpartition\s+(by|of)\b/i },
+  // §31 Partitioning
+  { section: 31, pattern: /\bpartition\s+(by|of)\b/i },
 
-  // §31 Views / Materialized Views
-  { section: 31, pattern: /\bcreate\s+(or\s+replace\s+)?(materialized\s+)?view\b/i },
+  // §32 Views / Materialized Views
+  { section: 32, pattern: /\bcreate\s+(or\s+replace\s+)?(materialized\s+)?view\b/i },
 
-  // §33 Triggers & Functions
-  { section: 33, pattern: /\bcreate\s+(or\s+replace\s+)?trigger\b|\bcreate\s+(or\s+replace\s+)?function\b/i },
+  // §34 Triggers & Functions
+  { section: 34, pattern: /\bcreate\s+(or\s+replace\s+)?trigger\b|\bcreate\s+(or\s+replace\s+)?function\b/i },
 
-  // §34 Roles, Privileges, RLS
-  { section: 34, pattern: /\brow\s+level\s+security\b|\bcreate\s+policy\b|\bcreate\s+role\b|\bgrant\s+|\brevoke\s+/i },
+  // §35 Roles, Privileges, RLS
+  { section: 35, pattern: /\brow\s+level\s+security\b|\bcreate\s+policy\b|\bcreate\s+role\b|\bgrant\s+|\brevoke\s+/i },
 
-  // §39 pgvector — embeddings
-  { section: 39, pattern: /\bvector\s*\(|\bhalfvec\s*\(|\bsparsevec\s*\(/i },
+  // §40 pgvector — embeddings
+  { section: 40, pattern: /\bvector\s*\(|\bhalfvec\s*\(|\bsparsevec\s*\(/i },
 ];
 
 const MAX_CHARS_PER_SECTION = 2000;

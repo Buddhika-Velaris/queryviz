@@ -5,9 +5,11 @@ import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { clerkMiddleware } from '@clerk/express';
 import analyzeRouter from './routes/analyze.js';
 import learnRouter from './routes/learn.js';
 import validateRouter from './routes/validate.js';
+import { requireVelarisUser } from './middleware/requireVelarisUser.js';
 
 dotenv.config();
 
@@ -48,15 +50,18 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Clerk auth context (parses session token if present, does not require it)
+app.use(clerkMiddleware());
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// API routes
-app.use('/api/analyze', analyzeRouter);
-app.use('/api/learn', learnRouter);
-app.use('/api/validate', validateRouter);
+// API routes — all AI endpoints require @velaris.io
+app.use('/api/learn', requireVelarisUser, learnRouter);
+app.use('/api/analyze', requireVelarisUser, analyzeRouter);
+app.use('/api/validate', requireVelarisUser, validateRouter);
 
 // Serve static files from frontend build in production
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

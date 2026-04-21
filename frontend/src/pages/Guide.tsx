@@ -623,7 +623,7 @@ export default function Guide() {
                   color: 'text-purple-400',
                   bg: 'bg-purple-500/10 border-purple-500/20',
                   title: 'Grounded in a knowledge base',
-                  desc: 'Findings reference specific §sections (e.g. §7 Numeric & ID Types, §42 Anti-Patterns). Click through to Learn for the full explanation.',
+                  desc: 'Findings reference specific §sections (e.g. §7 Numeric & ID Types, §43 Anti-Patterns). Click through to Learn for the full explanation.',
                 },
                 {
                   icon: Zap,

@@ -1,20 +1,23 @@
 {
-  "name": "queryviz",
+  "name": "queryviz-monorepo",
   "version": "1.0.0",
   "description": "SQL Performance Analyzer for PostgreSQL query plans",
   "private": true,
   "workspaces": [
     "backend",
-    "frontend"
+    "frontend",
+    "cli"
   ],
   "scripts": {
-    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install && cd ../cli && npm install",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "cd backend && npm run dev",
     "dev:frontend": "cd frontend && npm run dev",
-    "build": "npm run build:frontend && npm run build:backend",
+    "dev:cli": "cd cli && npm run dev --",
+    "build": "npm run build:frontend && npm run build:backend && npm run build:cli",
     "build:frontend": "cd frontend && npm run build",
     "build:backend": "cd backend && npm run build",
+    "build:cli": "cd cli && npm run build",
     "start": "cd backend && npm start"
   },
   "devDependencies": {

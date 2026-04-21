@@ -90,18 +90,35 @@ Copy the JSON output and paste it into QueryViz.
 4. Click "Compare Plans"
 5. Review the side-by-side comparison and AI report
 
+## CLI (for VPN'd / private databases)
+
+If your database isn't reachable from the public internet, use the CLI to run
+`EXPLAIN` locally and send only the plan JSON to QueryViz — credentials never
+leave your machine.
+
+```bash
+# Zero-install
+npx queryviz run "SELECT * FROM users WHERE email = 'x@y.com'" --db $DATABASE_URL
+
+# Or global
+npm install -g queryviz
+queryviz run --file query.sql --db $DATABASE_URL
+queryviz run --file query.sql --db $DATABASE_URL --save plan.json --no-upload
+queryviz upload plan.json
+queryviz compare -a before.sql -b after.sql --db $DATABASE_URL
+```
+
+See [cli/README.md](cli/README.md) for the full reference.
+
 ## Project Structure
 
 ```
 queryviz/
 ├── backend/
 │   ├── src/
-│   │   ├── routes/
-│   │   │   └── analyze.ts          # API endpoints
-│   │   ├── services/
-│   │   │   └── llmService.ts       # OpenAI integration
-│   │   ├── utils/
-│   │   │   └── planParser.ts       # Query plan parsing utilities
+│   │   ├── routes/                 # API endpoints (analyze, learn, validate)
+│   │   ├── services/               # llmService, cache, learnService
+│   │   ├── utils/                  # planParser, knowledgeLoader
 │   │   └── server.ts               # Express server setup
 │   ├── package.json
 │   └── tsconfig.json
@@ -109,10 +126,17 @@ queryviz/
 │   ├── src/
 │   │   ├── components/             # React components
 │   │   ├── pages/                  # Page components
-│   │   ├── services/
-│   │   │   └── api.ts             # API client
+│   │   ├── store/                  # Zustand analysis store
+│   │   ├── services/api.ts         # API client
 │   │   ├── App.tsx
 │   │   └── main.tsx
+│   ├── package.json
+│   └── tsconfig.json
+├── cli/
+│   ├── src/
+│   │   ├── commands/               # run, upload, compare
+│   │   ├── lib/                    # explain, api, render, io, config
+│   │   └── index.ts                # Commander entry (bin)
 │   ├── package.json
 │   └── tsconfig.json
 └── package.json                    # Root package with workspace scripts

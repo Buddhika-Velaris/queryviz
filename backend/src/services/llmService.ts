@@ -356,7 +356,7 @@ However, apply graduated judgement based on the apparent table purpose. Infer pu
     → Type must match the lookup PK exactly. If lookup is INTEGER, child FK stays INTEGER. This is the deliberate, correct choice.
 
   SOFT-DELETE PATTERN (applies at any scale):
-    → \`archived SMALLINT DEFAULT 0\` or \`deleted BOOLEAN\` → recommend \`archived_at TIMESTAMPTZ NULL\` / \`deleted_at TIMESTAMPTZ NULL\` (§42). Carries when-deleted for free and \`WHERE archived_at IS NULL\` reads cleaner.
+    → \`archived SMALLINT DEFAULT 0\` or \`deleted BOOLEAN\` → recommend \`archived_at TIMESTAMPTZ NULL\` / \`deleted_at TIMESTAMPTZ NULL\` (§43). Carries when-deleted for free and \`WHERE archived_at IS NULL\` reads cleaner.
 
   TIMESTAMP NAMING:
     → \`created\` / \`modified\` → recommend \`created_at\` / \`modified_at\` for convention.
