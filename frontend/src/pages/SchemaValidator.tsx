@@ -15,16 +15,23 @@ import {
   ChevronDown,
   ChevronUp,
   MessageSquare,
+  Sparkles,
+  Database,
+  Loader2,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import {
   validateSchema,
+  generateOptimalQueries,
   SchemaValidationResult,
   SchemaFinding,
   SchemaRecommendation,
   SuggestedReading,
+  OptimizedQuery,
+  QueryIndex,
+  QueryGenerationResult,
 } from '../services/api';
 import { useAnalysisStore } from '../store/analysisStore';
 
@@ -314,7 +321,283 @@ function ResultPanel({ result, cached }: { result: SchemaValidationResult; cache
     </div>
   );
 }
+// ─── Query generation ───────────────────────────────────────────────────────────────
 
+const impactConfig = {
+  critical:    { badge: 'bg-red-500/20 text-red-400 border border-red-500/30',    label: 'Critical' },
+  recommended: { badge: 'bg-amber-500/20 text-amber-400 border border-amber-500/30', label: 'Recommended' },
+  optional:    { badge: 'bg-blue-500/20 text-blue-400 border border-blue-500/30',   label: 'Optional' },
+} as const;
+
+function QueryCard({ query, index }: { query: OptimizedQuery; index: number }) {
+  const [copied, setCopied] = useState(false);
+  const [open, setOpen] = useState(false);
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(query.sql);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <div className="rounded-xl border border-gray-700 bg-gray-900 overflow-hidden">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-700 bg-gray-800/60">
+        <div className="w-6 h-6 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center flex-shrink-0">
+          <span className="text-indigo-400 text-xs font-bold">{index + 1}</span>
+        </div>
+        <p className="flex-1 text-gray-200 text-sm font-medium leading-snug">{query.description}</p>
+        <button onClick={handleCopy} type="button" className="flex items-center gap-1 px-2.5 py-1 rounded text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 border border-gray-600 transition-colors flex-shrink-0">
+          {copied ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+      <SyntaxHighlighter language="sql" style={vscDarkPlus} customStyle={{ margin: 0, padding: '1rem 1.25rem', fontSize: '0.775rem', background: 'transparent' }}>
+        {query.sql}
+      </SyntaxHighlighter>
+      <button type="button" onClick={() => setOpen((o) => !o)} className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-gray-500 hover:text-gray-300 hover:bg-gray-700/50 border-t border-gray-700/50 transition-colors">
+        {open ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+        {open ? 'Hide explanation' : 'Why is this optimal?'}
+      </button>
+      {open && (
+        <div className="px-4 py-3 border-t border-gray-700/50 bg-gray-800/30">
+          <p className="text-gray-400 text-sm leading-relaxed">{query.explanation}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function IndexCard({ idx }: { idx: QueryIndex }) {
+  const [copied, setCopied] = useState(false);
+  const cfg = impactConfig[idx.impact];
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(idx.sql);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <div className="rounded-xl border border-gray-700 bg-gray-900 overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-700 bg-gray-800/60">
+        <span className={`text-xs font-semibold uppercase px-2 py-0.5 rounded-full ${cfg.badge}`}>{cfg.label}</span>
+        <button onClick={handleCopy} type="button" className="flex items-center gap-1 px-2.5 py-1 rounded text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 border border-gray-600 transition-colors">
+          {copied ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+      <SyntaxHighlighter language="sql" style={vscDarkPlus} customStyle={{ margin: 0, padding: '0.875rem 1.25rem', fontSize: '0.775rem', background: 'transparent' }}>
+        {idx.sql}
+      </SyntaxHighlighter>
+      <div className="px-4 py-2.5 border-t border-gray-700/50 bg-gray-800/30">
+        <p className="text-gray-400 text-xs leading-relaxed">{idx.reason}</p>
+      </div>
+    </div>
+  );
+}
+
+function IndexesSection({ indexes }: { indexes: QueryIndex[] }) {
+  const [allCopied, setAllCopied] = useState(false);
+  const handleCopyAll = async () => {
+    await navigator.clipboard.writeText(indexes.map((ix) => ix.sql).join('\n\n'));
+    setAllCopied(true);
+    setTimeout(() => setAllCopied(false), 2000);
+  };
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-4">
+        <span className="text-xs font-bold tracking-widest text-gray-400 uppercase">Required Indexes</span>
+        <div className="flex-1 h-px bg-gray-700" />
+        <button type="button" onClick={handleCopyAll} className="flex items-center gap-1 px-2.5 py-1 rounded text-xs bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-gray-200 border border-gray-700 transition-colors">
+          {allCopied ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+          {allCopied ? 'Copied' : 'Copy all'}
+        </button>
+      </div>
+      <div className="space-y-3">
+        {indexes.map((ix, i) => <IndexCard key={i} idx={ix} />)}
+      </div>
+    </div>
+  );
+}
+
+const PATTERNS_PLACEHOLDER = `Describe the queries you'll run against this schema, e.g.:
+• Find all orders for a specific user, ordered by created_at DESC
+• Count active orders grouped by status for a dashboard
+• Look up a user by email address
+• Join orders with users to show order totals per customer`;
+
+function QueryGenSection() {
+  const { schemaValidation } = useAnalysisStore();
+  const [accessPatterns, setAccessPatterns] = useState('');
+  const [relatedDdl, setRelatedDdl] = useState('');
+  const [relatedOpen, setRelatedOpen] = useState(false);
+  const [result, setResult] = useState<QueryGenerationResult | null>(null);
+  const [cached, setCached] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const canGenerate = accessPatterns.trim().length > 0 && !loading;
+
+  const handleGenerate = async () => {
+    if (!canGenerate) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await generateOptimalQueries(
+        schemaValidation.sql.trim(),
+        accessPatterns.trim(),
+        relatedDdl.trim() || undefined,
+      );
+      setResult(data.result);
+      setCached(data.cached);
+    } catch (err: any) {
+      setError(err.message || 'Failed to generate queries');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="mt-10">
+      {/* Section divider */}
+      <div className="flex items-center gap-4 mb-6">
+        <div className="flex-1 h-px bg-gradient-to-r from-transparent to-gray-700" />
+        <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-indigo-500/10 border border-indigo-500/20">
+          <Sparkles size={13} className="text-indigo-400" />
+          <span className="text-xs font-semibold text-indigo-300 whitespace-nowrap">Generate Optimal Queries</span>
+        </div>
+        <div className="flex-1 h-px bg-gradient-to-l from-transparent to-gray-700" />
+      </div>
+
+      {/* Input card */}
+      <div className="rounded-xl border border-gray-700 bg-gray-900 overflow-hidden mb-6">
+        <div className="px-5 py-4 border-b border-gray-700 bg-gray-800/60">
+          <p className="text-gray-300 text-sm leading-relaxed">
+            Describe your access patterns and get AI-generated queries with the exact indexes needed, tuned to this schema.
+          </p>
+        </div>
+
+        {/* Access patterns */}
+        <div className="p-5 pb-0">
+          <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+            Access patterns <span className="text-red-400">*</span>
+          </label>
+          <textarea
+            value={accessPatterns}
+            onChange={(e) => setAccessPatterns(e.target.value)}
+            placeholder={PATTERNS_PLACEHOLDER}
+            rows={6}
+            spellCheck
+            className="w-full bg-gray-800 rounded-lg border border-gray-700 px-4 py-3 text-sm text-gray-200 placeholder:text-gray-600 focus:outline-none focus:border-indigo-500/50 resize-none leading-relaxed"
+          />
+        </div>
+
+        {/* Related DDLs */}
+        <div className="mt-4 border-t border-gray-700">
+          <button
+            type="button"
+            onClick={() => setRelatedOpen((o) => !o)}
+            className="w-full flex items-center justify-between px-5 py-3 text-left hover:bg-gray-800/50 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Database size={13} className={relatedDdl.trim() ? 'text-indigo-400' : 'text-gray-500'} />
+              <span className={`text-xs font-medium ${relatedDdl.trim() ? 'text-indigo-300' : 'text-gray-500'}`}>
+                Related table DDLs
+                <span className="ml-1.5 font-normal text-gray-600">— optional, needed for JOIN queries</span>
+              </span>
+              {relatedDdl.trim() && (
+                <span className="text-xs bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-1.5 py-0.5 rounded-full">set</span>
+              )}
+            </div>
+            {relatedOpen
+              ? <ChevronUp size={13} className="text-gray-500 flex-shrink-0" />
+              : <ChevronDown size={13} className="text-gray-500 flex-shrink-0" />}
+          </button>
+          {relatedOpen && (
+            <div className="border-t border-gray-700">
+              <textarea
+                value={relatedDdl}
+                onChange={(e) => setRelatedDdl(e.target.value)}
+                placeholder={`-- Paste DDL for any tables this schema JOINs with\nCREATE TABLE public.users (\n  user_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n  email   TEXT NOT NULL UNIQUE\n);`}
+                rows={8}
+                spellCheck={false}
+                className="w-full bg-transparent resize-none px-5 py-4 font-mono text-sm text-gray-200 placeholder:text-gray-600 focus:outline-none leading-relaxed"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-3 px-5 py-3 border-t border-gray-700 bg-gray-800/40">
+          {result && !loading && (
+            <span className="text-xs text-gray-500 flex items-center gap-2">
+              {cached && (
+                <span className="text-purple-400 bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-full">cached</span>
+              )}
+              {result.queries.length} quer{result.queries.length === 1 ? 'y' : 'ies'}
+              {' · '}
+              {result.indexes.length} index{result.indexes.length !== 1 ? 'es' : ''}
+            </span>
+          )}
+          <button
+            onClick={handleGenerate}
+            disabled={!canGenerate}
+            type="button"
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+              !canGenerate
+                ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+            }`}
+          >
+            {loading
+              ? <><Loader2 size={13} className="animate-spin" /> Generating…</>
+              : <><Sparkles size={13} /> {result ? 'Regenerate' : 'Generate Queries'}</>
+            }
+          </button>
+        </div>
+      </div>
+
+      {/* Loading */}
+      {loading && (
+        <div className="flex items-center gap-3 p-4 rounded-xl bg-indigo-500/10 border border-indigo-500/20">
+          <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+          <p className="text-indigo-300 text-sm">Generating optimal queries and indexes…</p>
+        </div>
+      )}
+
+      {/* Error */}
+      {error && (
+        <div className="flex gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/20">
+          <AlertCircle size={16} className="text-red-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-red-300 text-sm font-medium">Generation failed</p>
+            <p className="text-red-400/80 text-xs mt-0.5">{error}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Results */}
+      {result && !loading && (
+        <div className="space-y-8">
+          {result.queries.length > 0 && (
+            <div>
+              <SectionHeader>Optimized Queries</SectionHeader>
+              <div className="space-y-4">
+                {result.queries.map((q, i) => <QueryCard key={i} query={q} index={i} />)}
+              </div>
+            </div>
+          )}
+          {result.indexes.length > 0 && <IndexesSection indexes={result.indexes} />}
+          {result.notes && (
+            <div className="flex gap-3 p-4 rounded-xl bg-blue-500/10 border border-blue-500/30">
+              <Info size={16} className="text-blue-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <div className="text-xs font-bold uppercase tracking-wider text-blue-400 mb-1">Notes</div>
+                <p className="text-gray-300 text-sm leading-relaxed">{result.notes}</p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 const PLACEHOLDER = `-- Paste your PostgreSQL DDL here — tables, indexes, constraints, ALTERs, triggers.
@@ -500,6 +783,7 @@ export default function SchemaValidator() {
 
       {/* Results */}
       {result && <ResultPanel result={result} cached={cached} />}
+      {result && <QueryGenSection />}
     </div>
   );
 }

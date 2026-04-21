@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { validateSchemaSQL } from '../services/llmService.js';
+import { validateSchemaSQL, generateOptimalQueries } from '../services/llmService.js';
 import { getOrCompute, hashKey } from '../services/cache.js';
 
 const router = Router();
@@ -69,6 +69,66 @@ router.post('/schema', async (req: Request<{}, {}, ValidateSchemaRequest>, res: 
     console.error('Schema validation error:', error);
     res.status(500).json({
       error: error.message || 'Failed to validate schema',
+      details: error.code || 'internal_error',
+    });
+  }
+});
+
+// ─── Query generation endpoint ───────────────────────────────────────────────
+
+const MAX_PATTERNS_SIZE = 3_000;    // 3 KB — enough for 10+ detailed patterns
+const MAX_RELATED_DDL_SIZE = 100_000; // same limit as primary DDL
+
+interface QueryGenRequest {
+  primaryDdl: string;
+  accessPatterns: string;
+  relatedDdl?: string;
+}
+
+router.post('/queries', async (req: Request<{}, {}, QueryGenRequest>, res: Response) => {
+  const startTime = Date.now();
+  try {
+    const { primaryDdl, accessPatterns, relatedDdl } = req.body;
+
+    if (!primaryDdl || typeof primaryDdl !== 'string') {
+      return res.status(400).json({ error: 'primaryDdl is required' });
+    }
+    if (!accessPatterns || typeof accessPatterns !== 'string') {
+      return res.status(400).json({ error: 'accessPatterns is required' });
+    }
+
+    const trimmedDdl = primaryDdl.trim();
+    const trimmedPatterns = accessPatterns.trim().slice(0, MAX_PATTERNS_SIZE);
+    const trimmedRelated = typeof relatedDdl === 'string'
+      ? relatedDdl.trim().slice(0, MAX_RELATED_DDL_SIZE)
+      : undefined;
+
+    if (!trimmedDdl) return res.status(400).json({ error: 'primaryDdl must not be empty' });
+    if (!trimmedPatterns) return res.status(400).json({ error: 'accessPatterns must not be empty' });
+    if (trimmedDdl.length > MAX_SQL_SIZE) {
+      return res.status(413).json({ error: 'DDL exceeds maximum size of 100 KB' });
+    }
+
+    const PROMPT_VERSION = 'v1';
+    const key = hashKey(`query-gen-${PROMPT_VERSION}`, trimmedDdl, trimmedPatterns, trimmedRelated ?? '');
+    const { value, cached } = await getOrCompute(
+      `query-gen-${PROMPT_VERSION}`,
+      key,
+      () => generateOptimalQueries(trimmedDdl, trimmedPatterns, trimmedRelated),
+    );
+
+    const processingTime = Date.now() - startTime;
+    console.log(`[API] Query generation done in ${processingTime}ms (cached: ${cached})`);
+
+    res.json({
+      result: value,
+      cached,
+      metadata: { processingTime, timestamp: new Date().toISOString() },
+    });
+  } catch (error: any) {
+    console.error('Query generation error:', error);
+    res.status(500).json({
+      error: error.message || 'Failed to generate queries',
       details: error.code || 'internal_error',
     });
   }

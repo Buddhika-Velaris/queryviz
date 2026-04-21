@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { sectionsAsPromptBlock } from '../utils/knowledgeLoader.js';
+import { sectionsAsPromptBlock, sectionsAsQueryPromptBlock } from '../utils/knowledgeLoader.js';
 
 let openaiInstance: OpenAI | null = null;
 
@@ -439,4 +439,105 @@ Respond in plain text (no JSON, no markdown headers). Under 60 words. Cover: wha
     console.error('OpenAI API error:', error);
     throw new Error(`Node explanation failed: ${error.message}`);
   }
+}
+
+// ─── Query generation ─────────────────────────────────────────────────────────
+
+export interface OptimizedQuery {
+  description: string;
+  sql: string;
+  explanation: string;
+}
+
+export interface QueryIndex {
+  sql: string;
+  reason: string;
+  impact: 'critical' | 'recommended' | 'optional';
+}
+
+export interface QueryGenerationResult {
+  queries: OptimizedQuery[];
+  indexes: QueryIndex[];
+  notes: string;
+}
+
+export async function generateOptimalQueries(
+  primaryDdl: string,
+  accessPatterns: string,
+  relatedDdl?: string,
+): Promise<QueryGenerationResult> {
+  const combinedDdl = relatedDdl?.trim()
+    ? `${primaryDdl}\n\n-- Related tables:\n${relatedDdl}`
+    : primaryDdl;
+
+  const knowledgeBlock = sectionsAsQueryPromptBlock(combinedDdl, accessPatterns);
+
+  const systemPrompt = `You are a world-class PostgreSQL performance engineer. Given one or more DDL schemas and a list of access patterns, produce the most optimal PostgreSQL queries and the exact indexes they require. Return ONLY a valid JSON object — no markdown, no prose outside JSON.
+
+Below are the authoritative PostgreSQL best-practice reference sections you MUST apply:
+
+${knowledgeBlock}
+
+Return exactly this structure:
+{
+  "queries": [
+    {
+      "description": "<one sentence: what this query retrieves or achieves>",
+      "sql": "<complete, ready-to-run SQL — schema-qualified names, meaningful aliases, CTEs or subqueries where they improve performance>",
+      "explanation": "<2-4 sentences: why this form is optimal — index usage, join strategy, filter placement, row estimate, and any rewrites applied>"
+    }
+  ],
+  "indexes": [
+    {
+      "sql": "<ready-to-run CREATE INDEX CONCURRENTLY statement with a descriptive name>",
+      "reason": "<one sentence: which query or pattern this index serves and why>",
+      "impact": "critical"|"recommended"|"optional"
+    }
+  ],
+  "notes": "<1-2 sentences: caveats, assumptions made, or follow-up considerations>"
+}
+
+Rules:
+- One optimised query per access pattern. If a pattern has natural variants (paginated vs full, with/without a filter) produce both and label them.
+- Filter placement: push WHERE predicates as early as possible — inside CTEs, subquery FROM clauses, and JOIN ON conditions rather than an outer WHERE.
+- Composite index column order: equality predicates first, then range predicates, then ORDER BY columns.
+- Use CREATE INDEX CONCURRENTLY so indexes can be built on live tables.
+- Use partial indexes (WHERE clause) when the query targets a selective subset of rows.
+- Add INCLUDE columns for hot covering-index paths.
+- impact levels — critical: missing this causes a seq scan on a large table; recommended: significant gain; optional: minor gain.
+- Never invent columns, tables, or types not present in the provided DDL.
+- If a JOIN requires a table not in the DDL, produce the best possible query and mention the missing table in notes.`;
+
+  const userPrompt = relatedDdl?.trim()
+    ? `Primary schema:\n${primaryDdl}\n\nRelated table DDLs (for JOINs):\n${relatedDdl}\n\nAccess patterns:\n${accessPatterns}`
+    : `Schema:\n${primaryDdl}\n\nAccess patterns:\n${accessPatterns}`;
+
+  const openai = getOpenAI();
+  const response = await openai.chat.completions.create({
+    model: MODEL,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ],
+    temperature: 0.2,
+    max_completion_tokens: 16000,
+    response_format: { type: 'json_object' },
+  });
+
+  const choice = response.choices[0];
+  const content = choice?.message?.content || '';
+  const finish = choice?.finish_reason;
+
+  console.log('[llm] query gen:', {
+    finish_reason: finish,
+    usage: response.usage,
+    content_length: content.length,
+  });
+
+  if (!content) throw new Error(`LLM returned empty content (finish_reason: ${finish})`);
+  if (finish === 'length') {
+    console.warn('[llm] Query gen response hit token limit — attempting JSON repair');
+  }
+
+  return extractJSON(content) as QueryGenerationResult;
 }

@@ -287,4 +287,41 @@ export async function validateSchema(
   }
 }
 
+// ─── Query generation ─────────────────────────────────────────────────────────
+
+export interface OptimizedQuery {
+  description: string;
+  sql: string;
+  explanation: string;
+}
+
+export interface QueryIndex {
+  sql: string;
+  reason: string;
+  impact: 'critical' | 'recommended' | 'optional';
+}
+
+export interface QueryGenerationResult {
+  queries: OptimizedQuery[];
+  indexes: QueryIndex[];
+  notes: string;
+}
+
+export async function generateOptimalQueries(
+  primaryDdl: string,
+  accessPatterns: string,
+  relatedDdl?: string,
+): Promise<{ result: QueryGenerationResult; cached: boolean }> {
+  try {
+    const response = await api.post('/validate/queries', {
+      primaryDdl,
+      accessPatterns,
+      relatedDdl: relatedDdl?.trim() || undefined,
+    });
+    return response.data as { result: QueryGenerationResult; cached: boolean };
+  } catch (error: any) {
+    throw new Error(error.response?.data?.error || 'Failed to generate queries');
+  }
+}
+
 export default api;

@@ -187,4 +187,103 @@ export function sectionsAsPromptBlock(sql: string): string {
     .join('\n\n');
 }
 
+// ─── Query-generation knowledge selection ────────────────────────────────────
+// Sections always injected for query generation (DDL design + query execution
+// fundamentals that apply regardless of access pattern).
+const QUERY_CORE_SECTIONS = [
+  5,   // NULL Handling & COALESCE Patterns
+  7,   // Numeric & ID Types
+  21,  // Indexes — Theory & Practice
+  22,  // EXPLAIN & Query Analysis
+  43,  // Anti-Patterns to Avoid
+];
+
+// Additional sections triggered by keywords in the access pattern description
+// or in the DDL itself.
+const QUERY_CONDITIONAL_SECTIONS: { section: number; pattern: RegExp }[] = [
+  // §6 Time & Date — date ranges, date_trunc, age(), generate_series, interval arithmetic
+  { section: 6,  pattern: /\b(date|timestamp|time|interval|age\s*\(|date_trunc|generate_series|created_at|updated_at|ordered_at|_at\b|_on\b)/i },
+
+  // §14 JSON — jsonb operators, json_agg, jsonb_set
+  { section: 14, pattern: /\bjsonb?\b|json_agg|jsonb_set|json_build/i },
+
+  // §15 Arrays — array_agg, unnest, ANY
+  { section: 15, pattern: /\barray_agg\b|\bunnest\b|\bany\s*\(|\ball\s*\(|\w+\[\]|\barray\[/i },
+
+  // §19 Full-Text Search — to_tsvector, ts_rank, plainto_tsquery
+  { section: 19, pattern: /\b(tsvector|tsquery|to_tsvector|to_tsquery|plainto_tsquery|ts_rank|@@@|@@)/i },
+
+  // §23 Joins — any mention of joining, joining tables, foreign key traversal
+  { section: 23, pattern: /\bjoin\b|\bleft\s+join\b|\binner\s+join\b|\bcross\s+join\b|\bfull\s+outer\b/i },
+
+  // §24 Subqueries — correlated subqueries, IN/NOT IN/EXISTS
+  { section: 24, pattern: /\bsubquer\b|\bexists\s*\(|\bnot\s+exists\b|\bin\s*\(select|\bnot\s+in\b/i },
+
+  // §25 Lateral Joins — lateral, unnest in FROM
+  { section: 25, pattern: /\blateral\b/i },
+
+  // §26 SET Operations — UNION, INTERSECT, EXCEPT
+  { section: 26, pattern: /\bunion\b|\bintersect\b|\bexcept\b/i },
+
+  // §27 Window Functions — rank, row_number, lag, lead, running totals, moving avg
+  { section: 27, pattern: /\bover\s*\(|\bpartition\s+by\b|\brow_number\b|\brank\b|\bdense_rank\b|\blag\b|\blead\b|\bnth_value\b|\bntile\b|\bfirst_value\b|\blast_value\b|window function|running total|moving average/i },
+
+  // §28 Grouping Sets, ROLLUP & CUBE
+  { section: 28, pattern: /\brollup\b|\bcube\b|\bgrouping\s+sets\b|\bgrouping\s*\(/i },
+
+  // §29 CTEs (WITH / RECURSIVE)
+  { section: 29, pattern: /\bwith\b[\s\S]{0,20}\bselect\b|\bcte\b|\bcommon\s+table\s+express|\brecursive\b/i },
+
+  // §30 Transactions & Concurrency — SELECT FOR UPDATE, SKIP LOCKED, advisory locks
+  { section: 30, pattern: /\bfor\s+update\b|\bskip\s+locked\b|\bnowait\b|\badvisory\b|\bselect_for_update\b|\btransaction\b|\bconcurren/i },
+
+  // §31 Table Partitioning — queries on partitioned tables
+  { section: 31, pattern: /\bpartition\b/i },
+
+  // §32 Views & Materialized Views
+  { section: 32, pattern: /\bmateriializ|\bmaterialized\b|\brefresh\s+materialized\b|\bview\b/i },
+
+  // §36 Performance Tuning — work_mem, enable_seqscan, parallel query
+  { section: 36, pattern: /\bwork_mem\b|\benable_seqscan\b|\bparallel\b|\bseq_page_cost\b|\brandom_page_cost\b/i },
+
+  // §40 pgvector — vector similarity / semantic search queries
+  { section: 40, pattern: /\bvector\b|\bembedding\b|\bsemantic\s+search\b|\bcosine\b|\bl2\b|\binn\b|\bhnsw\b|\bivfflat\b|<->|<#>|<=>/i },
+];
+
+export function selectQuerySections(ddl: string, accessPatterns: string): ExtractedSection[] {
+  const all = getAllSections();
+  const cleanDdl = stripComments(ddl);
+  const combined = cleanDdl + '\n' + accessPatterns; // scan both sources
+
+  const picked = new Set<number>(QUERY_CORE_SECTIONS);
+
+  // DDL-driven sections (same as schema validation — carry over type/feature context)
+  for (const { section, pattern } of CONDITIONAL_SECTIONS) {
+    if (pattern.test(cleanDdl)) picked.add(section);
+  }
+
+  // Query/pattern-driven sections
+  for (const { section, pattern } of QUERY_CONDITIONAL_SECTIONS) {
+    if (pattern.test(combined)) picked.add(section);
+  }
+
+  const result: ExtractedSection[] = [];
+  for (const num of [...picked].sort((a, b) => a - b)) {
+    const s = all.get(num);
+    if (s) result.push(s);
+  }
+
+  console.log(
+    `[knowledge] Query sections selected (${result.length}): ${result.map(s => `§${s.number}`).join(', ')}`,
+  );
+  return result;
+}
+
+export function sectionsAsQueryPromptBlock(ddl: string, accessPatterns: string): string {
+  const sections = selectQuerySections(ddl, accessPatterns);
+  return sections
+    .map(s => `=== §${s.number}. ${s.title} ===\n${s.content}`)
+    .join('\n\n');
+}
+
 export { ExtractedSection };
