@@ -1,15 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import ComparisonInput from '../components/ComparisonInput';
 import MetricsSummary from '../components/MetricsSummary';
 import PlanVisualization from '../components/PlanVisualization';
 import LLMAnalysis from '../components/LLMAnalysis';
-import { comparePlans } from '../services/api';
+import { comparePlans, getHistoryRecord, type ComparisonRecord } from '../services/api';
 import { AlertCircle, Lightbulb, Trash2 } from 'lucide-react';
+import { useParams } from 'react-router-dom';
 import { useAnalysisStore } from '../store/analysisStore';
 
 type ActivePlan = 'A' | 'B';
 
 export default function Comparison() {
+  const { id } = useParams<{ id: string }>();
   const {
     comparisonResult: result,
     comparisonError: error,
@@ -20,6 +22,24 @@ export default function Comparison() {
     clearComparison,
   } = useAnalysisStore();
   const [activePlan, setActivePlan] = useState<ActivePlan>('A');
+
+  useEffect(() => {
+    if (!id) return;
+    setComparisonLoading(true);
+    setComparisonError(null);
+    getHistoryRecord<ComparisonRecord>('comparison', id)
+      .then((r) => {
+        setComparisonResult({
+          planA: { plan: r.planA, metrics: r.metricsA },
+          planB: { plan: r.planB, metrics: r.metricsB },
+          comparison: r.comparison,
+          improvement: r.improvement,
+        });
+        setActivePlan('A');
+      })
+      .catch((err) => setComparisonError(err.message || 'Failed to load record'))
+      .finally(() => setComparisonLoading(false));
+  }, [id]);
 
   const handleCompare = async (planA: string, planB: string) => {
     setComparisonLoading(true);
@@ -61,7 +81,13 @@ export default function Comparison() {
         </div>
       )}
 
-      <ComparisonInput onSubmit={handleCompare} loading={loading} />
+      <ComparisonInput
+        key={id ? (result ? `${id}-loaded` : `${id}-loading`) : (result ? 'with-result' : 'empty')}
+        onSubmit={handleCompare}
+        loading={loading}
+        initialPlanA={result ? JSON.stringify(result.planA.plan, null, 2) : ''}
+        initialPlanB={result ? JSON.stringify(result.planB.plan, null, 2) : ''}
+      />
 
       {error && (
         <div className="mt-4 flex gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/20">

@@ -11,7 +11,6 @@ import {
   type SchemaValidationRecord,
   type QueryGenerationRecord,
 } from '../services/api';
-import { useAnalysisStore } from '../store/analysisStore';
 
 // ─── Type metadata ─────────────────────────────────────────────────────────────
 
@@ -295,7 +294,6 @@ function HistoryCard({
   const [expanded, setExpanded] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const navigate = useNavigate();
-  const { setSingleResult, setComparisonResult, setSchemaValidation, setQueryGen, clearQueryGen } = useAnalysisStore();
 
   const meta = TYPE_META[record.recordType];
 
@@ -309,38 +307,18 @@ function HistoryCard({
   function handleOpen(e: React.MouseEvent) {
     e.stopPropagation();
     switch (record.recordType) {
-      case 'single_analysis': {
-        const r = record as SingleAnalysisRecord;
-        setSingleResult({ plan: r.planJson, metrics: r.metrics, analysis: r.analysis });
-        navigate('/analyze');
+      case 'single_analysis':
+        navigate(`/analyze/${record._id}`);
         break;
-      }
-      case 'comparison': {
-        const r = record as ComparisonRecord;
-        setComparisonResult({
-          planA: { plan: r.planA, metrics: r.metricsA },
-          planB: { plan: r.planB, metrics: r.metricsB },
-          comparison: r.comparison,
-          improvement: r.improvement,
-        });
-        navigate('/compare');
+      case 'comparison':
+        navigate(`/compare/${record._id}`);
         break;
-      }
-      case 'schema_validation': {
-        const r = record as SchemaValidationRecord;
-        clearQueryGen();
-        setSchemaValidation({ sql: r.sql, userContext: r.userContext ?? '', result: r.result, cached: false, error: null, loading: false });
-        navigate('/validate');
+      case 'schema_validation':
+        navigate(`/validate/${record._id}`);
         break;
-      }
-      case 'query_generation': {
-        const r = record as QueryGenerationRecord;
-        // Load DDL as the schema SQL so the validate page shows the schema context
-        setSchemaValidation({ sql: r.primaryDdl, userContext: '', result: null, cached: false, error: null, loading: false });
-        setQueryGen({ accessPatterns: r.accessPatterns, relatedDdl: r.relatedDdl ?? '', result: r.result, cached: false });
-        navigate('/validate');
+      case 'query_generation':
+        navigate(`/querygen/${record._id}`);
         break;
-      }
     }
   }
 

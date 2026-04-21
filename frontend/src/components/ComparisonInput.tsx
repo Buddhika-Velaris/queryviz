@@ -4,6 +4,8 @@ import { Loader2, ArrowLeftRight } from 'lucide-react';
 interface ComparisonInputProps {
   onSubmit: (planA: string, planB: string) => void;
   loading: boolean;
+  initialPlanA?: string;
+  initialPlanB?: string;
 }
 
 interface PlanPanelProps {
@@ -48,9 +50,9 @@ function PlanPanel({ label, badge, badgeColor, value, onChange, disabled }: Plan
   );
 }
 
-export default function ComparisonInput({ onSubmit, loading }: ComparisonInputProps) {
-  const [planA, setPlanA] = useState('');
-  const [planB, setPlanB] = useState('');
+export default function ComparisonInput({ onSubmit, loading, initialPlanA, initialPlanB }: ComparisonInputProps) {
+  const [planA, setPlanA] = useState(initialPlanA ?? '');
+  const [planB, setPlanB] = useState(initialPlanB ?? '');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

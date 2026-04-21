@@ -401,4 +401,16 @@ export async function deleteHistoryRecord(
   }
 }
 
+export async function getHistoryRecord<T extends HistoryRecord>(
+  type: HistoryRecordType,
+  id: string,
+): Promise<T> {
+  try {
+    const response = await api.get(`/history/${type}/${id}`);
+    return response.data.record as T;
+  } catch (error: any) {
+    throw new Error(error.response?.data?.error || 'Failed to load record');
+  }
+}
+
 export default api;

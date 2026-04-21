@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   ShieldCheck,
   AlertCircle,
@@ -19,12 +19,15 @@ import {
   Database,
   Loader2,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useParams, useLocation } from 'react-router-dom';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import {
   validateSchema,
   generateOptimalQueries,
+  getHistoryRecord,
+  type SchemaValidationRecord,
+  type QueryGenerationRecord,
   SchemaValidationResult,
   SchemaFinding,
   SchemaRecommendation,
@@ -613,11 +616,33 @@ CREATE TABLE public.orders (
 CREATE INDEX idx_orders_user_id ON public.orders (user_id);`;
 
 export default function SchemaValidator() {
-  const { schemaValidation, setSchemaValidation, clearSchemaValidation } = useAnalysisStore();
+  const { id } = useParams<{ id: string }>();
+  const location = useLocation();
+  const { schemaValidation, setSchemaValidation, clearSchemaValidation, setQueryGen } = useAnalysisStore();
   const { sql, userContext, result, cached, error, loading } = schemaValidation;
 
   const [contextOpen, setContextOpen] = useState(() => schemaValidation.userContext.length > 0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (!id) return;
+    const isQueryGen = location.pathname.startsWith('/querygen');
+    setSchemaValidation({ loading: true, error: null });
+    if (isQueryGen) {
+      getHistoryRecord<QueryGenerationRecord>('query_generation', id)
+        .then((r) => {
+          setSchemaValidation({ sql: r.primaryDdl, userContext: '', result: null, cached: false, error: null, loading: false });
+          setQueryGen({ accessPatterns: r.accessPatterns, relatedDdl: r.relatedDdl ?? '', result: r.result, cached: false });
+        })
+        .catch((err) => setSchemaValidation({ error: err.message || 'Failed to load record', loading: false }));
+    } else {
+      getHistoryRecord<SchemaValidationRecord>('schema_validation', id)
+        .then((r) => {
+          setSchemaValidation({ sql: r.sql, userContext: r.userContext ?? '', result: r.result, cached: false, error: null, loading: false });
+        })
+        .catch((err) => setSchemaValidation({ error: err.message || 'Failed to load record', loading: false }));
+    }
+  }, [id]);
 
   const handleValidate = async () => {
     const trimmed = sql.trim();

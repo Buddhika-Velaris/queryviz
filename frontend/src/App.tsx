@@ -24,6 +24,14 @@ function App() {
           }
         />
         <Route
+          path="/analyze/:id"
+          element={
+            <RequireVelarisAuth>
+              <SingleAnalysis />
+            </RequireVelarisAuth>
+          }
+        />
+        <Route
           path="/compare"
           element={
             <RequireVelarisAuth>
@@ -32,7 +40,31 @@ function App() {
           }
         />
         <Route
+          path="/compare/:id"
+          element={
+            <RequireVelarisAuth>
+              <Comparison />
+            </RequireVelarisAuth>
+          }
+        />
+        <Route
           path="/validate"
+          element={
+            <RequireVelarisAuth>
+              <SchemaValidator />
+            </RequireVelarisAuth>
+          }
+        />
+        <Route
+          path="/validate/:id"
+          element={
+            <RequireVelarisAuth>
+              <SchemaValidator />
+            </RequireVelarisAuth>
+          }
+        />
+        <Route
+          path="/querygen/:id"
           element={
             <RequireVelarisAuth>
               <SchemaValidator />

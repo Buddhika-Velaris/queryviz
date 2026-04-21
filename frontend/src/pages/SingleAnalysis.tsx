@@ -2,13 +2,15 @@ import JsonInput from '../components/JsonInput';
 import PlanVisualization from '../components/PlanVisualization';
 import MetricsSummary from '../components/MetricsSummary';
 import LLMAnalysis from '../components/LLMAnalysis';
-import { analyzeSinglePlan } from '../services/api';
+import { useEffect } from 'react';
+import { analyzeSinglePlan, getHistoryRecord, type SingleAnalysisRecord } from '../services/api';
 import { Terminal, CheckCircle2, AlertCircle, Trash2, BookOpen, ArrowRight } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { recommendSectionsForPlan, saveLatestPlan, learnHref } from '../lib/sectionMap';
 import { useAnalysisStore } from '../store/analysisStore';
 
 export default function SingleAnalysis() {
+  const { id } = useParams<{ id: string }>();
   const {
     singleResult: result,
     singleError: error,
@@ -18,6 +20,16 @@ export default function SingleAnalysis() {
     setSingleLoading,
     clearSingle,
   } = useAnalysisStore();
+
+  useEffect(() => {
+    if (!id) return;
+    setSingleLoading(true);
+    setSingleError(null);
+    getHistoryRecord<SingleAnalysisRecord>('single_analysis', id)
+      .then((r) => setSingleResult({ plan: r.planJson, metrics: r.metrics, analysis: r.analysis }))
+      .catch((err) => setSingleError(err.message || 'Failed to load record'))
+      .finally(() => setSingleLoading(false));
+  }, [id]);
 
   const handleAnalyze = async (jsonInput: string) => {
     setSingleLoading(true);
@@ -66,7 +78,12 @@ export default function SingleAnalysis() {
         </div>
       )}
 
-      <JsonInput onSubmit={handleAnalyze} loading={loading} />
+      <JsonInput
+        key={id ? (result ? `${id}-loaded` : `${id}-loading`) : (result ? 'with-result' : 'empty')}
+        onSubmit={handleAnalyze}
+        loading={loading}
+        initialValue={result ? JSON.stringify(result.plan, null, 2) : ''}
+      />
 
       {/* Error state */}
       {error && (

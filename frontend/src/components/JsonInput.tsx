@@ -4,10 +4,11 @@ import { Loader2, Sparkles } from 'lucide-react';
 interface JsonInputProps {
   onSubmit: (jsonInput: string) => void;
   loading: boolean;
+  initialValue?: string;
 }
 
-export default function JsonInput({ onSubmit, loading }: JsonInputProps) {
-  const [input, setInput] = useState('');
+export default function JsonInput({ onSubmit, loading, initialValue }: JsonInputProps) {
+  const [input, setInput] = useState(initialValue ?? '');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
