@@ -3,10 +3,11 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 
 // Always loaded — foundational DDL rules that apply to every schema
+// §5  NULL Handling — NOT NULL, COALESCE, nullable FK columns
 // §20 Storage Internals (pages, MVCC, HOT updates) — foundational physical context
 // §21 Indexes — Theory & Practice
 // §43 Anti-Patterns — soft-delete, naming, common traps
-const CORE_SECTIONS = [2, 3, 7, 8, 9, 20, 21, 43];
+const CORE_SECTIONS = [2, 3, 5, 7, 8, 9, 20, 21, 43];
 
 // Loaded only when the submitted SQL contains matching syntax.
 // Patterns are matched against comment-stripped, lowercased SQL.
@@ -19,6 +20,9 @@ const CONDITIONAL_SECTIONS: { section: number; pattern: RegExp }[] = [
 
   // §10 Collations & Encoding
   { section: 10, pattern: /\bcollate\b|\bcitext\b|\bcreate\s+collation\b/i },
+
+  // §11 Casting & Type Conversion — explicit CAST() or :: cast operator in DDL
+  { section: 11, pattern: /\bcast\s*\(|::[a-z]/i },
 
   // §12 Binary / Bit
   { section: 12, pattern: /\b(bytea|bit\s*\(|bit\s+varying|varbit)\b/i },
@@ -44,17 +48,32 @@ const CONDITIONAL_SECTIONS: { section: number; pattern: RegExp }[] = [
   // §19 Full-Text Search
   { section: 19, pattern: /\b(tsvector|tsquery|to_tsvector|to_tsquery|ts_rank)\b/i },
 
+  // §30 Transactions & Concurrency Control — DEFERRABLE / DEFERRED FK constraints
+  { section: 30, pattern: /\bdeferrable\b|\binitially\s+(deferred|immediate)\b/i },
+
   // §31 Partitioning
   { section: 31, pattern: /\bpartition\s+(by|of)\b/i },
 
   // §32 Views / Materialized Views
   { section: 32, pattern: /\bcreate\s+(or\s+replace\s+)?(materialized\s+)?view\b/i },
 
-  // §34 Triggers & Functions
-  { section: 34, pattern: /\bcreate\s+(or\s+replace\s+)?trigger\b|\bcreate\s+(or\s+replace\s+)?function\b/i },
+  // §33 Stored Procedures & Functions
+  { section: 33, pattern: /\bcreate\s+(or\s+replace\s+)?(function|procedure)\b/i },
+
+  // §34 Triggers & Event-Driven Logic
+  { section: 34, pattern: /\bcreate\s+(or\s+replace\s+)?trigger\b/i },
 
   // §35 Roles, Privileges, RLS
   { section: 35, pattern: /\brow\s+level\s+security\b|\bcreate\s+policy\b|\bcreate\s+role\b|\bgrant\s+|\brevoke\s+/i },
+
+  // §36 Performance Tuning & Configuration — fillfactor, parallel_workers, storage params
+  { section: 36, pattern: /\bfillfactor\b|\bparallel_workers\b|\bwith\s*\(\s*fillfactor/i },
+
+  // §37 Vacuum, Autovacuum & Bloat Management — per-table autovacuum storage params
+  { section: 37, pattern: /\bautovacuum_\w+\b|\bvacuum_\w+\b|\btoast\.autovacuum/i },
+
+  // §39 Extensions
+  { section: 39, pattern: /\bcreate\s+extension\b/i },
 
   // §40 pgvector — embeddings
   { section: 40, pattern: /\bvector\s*\(|\bhalfvec\s*\(|\bsparsevec\s*\(/i },

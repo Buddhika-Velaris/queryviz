@@ -140,8 +140,12 @@ router.post('/compare', async (req: Request<{}, {}, ComparePlansRequest>, res: R
 
     // Calculate improvement percentages
     const improvement = {
-      executionTime: ((metricsA.executionTime - metricsB.executionTime) / metricsA.executionTime * 100).toFixed(2),
-      totalCost: ((metricsA.totalCost - metricsB.totalCost) / metricsA.totalCost * 100).toFixed(2),
+      executionTime: metricsA.executionTime > 0
+        ? ((metricsA.executionTime - metricsB.executionTime) / metricsA.executionTime * 100).toFixed(2)
+        : '0.00',
+      totalCost: metricsA.totalCost > 0
+        ? ((metricsA.totalCost - metricsB.totalCost) / metricsA.totalCost * 100).toFixed(2)
+        : '0.00',
       diskReads: ((metricsA.sharedBlocksRead - metricsB.sharedBlocksRead) / Math.max(metricsA.sharedBlocksRead, 1) * 100).toFixed(2),
     };
 

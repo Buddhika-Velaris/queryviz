@@ -2,6 +2,8 @@
 // the in-app PostgreSQL Guide (knowledge.md). Used by both the analyzer (deep
 // links from plan nodes) and the Learn page (recommended reading + worked
 // example).
+//
+// Section numbers match the Table of Contents in knowledge.md exactly.
 
 export interface SectionRef {
   number: number;
@@ -9,68 +11,114 @@ export interface SectionRef {
 }
 
 const SECTIONS: SectionRef[] = [
-  { number: 20, title: 'Indexes — Theory & Practice' },
-  { number: 21, title: 'EXPLAIN & Query Analysis' },
-  { number: 22, title: 'Joins' },
-  { number: 23, title: 'Subqueries' },
-  { number: 24, title: 'Lateral Joins' },
-  { number: 26, title: 'Window Functions' },
-  { number: 27, title: 'Grouping Sets, ROLLUP & CUBE' },
-  { number: 28, title: 'CTEs (Common Table Expressions)' },
-  { number: 29, title: 'Transactions & Concurrency Control' },
-  { number: 30, title: 'Table Partitioning' },
-  { number: 31, title: 'Views & Materialized Views' },
-  { number: 35, title: 'Performance Tuning & Configuration' },
-  { number: 36, title: 'Vacuum, Autovacuum & Bloat Management' },
+  { number: 1,  title: 'Introduction to PostgreSQL' },
+  { number: 2,  title: 'Schemas & Database Organization' },
+  { number: 3,  title: 'Data Integrity & Constraints' },
+  { number: 4,  title: 'Domain Types' },
+  { number: 5,  title: 'NULL Handling & COALESCE Patterns' },
+  { number: 6,  title: 'Time & Date Types' },
+  { number: 7,  title: 'Numeric & ID Types' },
+  { number: 8,  title: 'Sequences & Identity Columns' },
+  { number: 9,  title: 'String & Text Types' },
+  { number: 10, title: 'Character Sets, Collations & Encoding' },
+  { number: 11, title: 'Casting & Type Conversion' },
+  { number: 12, title: 'Binary Data & Bit Strings' },
+  { number: 13, title: 'Network & MAC Address Types' },
+  { number: 14, title: 'JSON Types' },
+  { number: 15, title: 'Arrays' },
+  { number: 16, title: 'Range Types' },
+  { number: 17, title: 'Generated Columns' },
+  { number: 18, title: 'Composite & Enum Types' },
+  { number: 19, title: 'Full-Text Search' },
+  { number: 20, title: 'Storage Internals — Pages, Disks & MVCC' },
+  { number: 21, title: 'Indexes — Theory & Practice' },
+  { number: 22, title: 'EXPLAIN & Query Analysis' },
+  { number: 23, title: 'Joins' },
+  { number: 24, title: 'Subqueries' },
+  { number: 25, title: 'Lateral Joins' },
+  { number: 26, title: 'SET Operations & Combining Queries' },
+  { number: 27, title: 'Window Functions' },
+  { number: 28, title: 'Grouping Sets, ROLLUP & CUBE' },
+  { number: 29, title: 'CTEs (Common Table Expressions)' },
+  { number: 30, title: 'Transactions & Concurrency Control' },
+  { number: 31, title: 'Table Partitioning' },
+  { number: 32, title: 'Views & Materialized Views' },
+  { number: 33, title: 'Stored Procedures & Functions' },
+  { number: 34, title: 'Triggers & Event-Driven Logic' },
+  { number: 35, title: 'Roles, Privileges & Row-Level Security' },
+  { number: 36, title: 'Performance Tuning & Configuration' },
+  { number: 37, title: 'Vacuum, Autovacuum & Bloat Management' },
+  { number: 38, title: 'Backup, Recovery & Replication' },
+  { number: 39, title: 'Extensions' },
+  { number: 40, title: 'pgvector & Semantic Search' },
+  { number: 41, title: 'Utility Patterns & Recipes' },
+  { number: 42, title: 'Quick Reference Cheatsheet' },
+  { number: 43, title: 'Anti-Patterns to Avoid' },
 ];
 
 const byNumber = new Map(SECTIONS.map(s => [s.number, s]));
 
 const NODE_TYPE_TO_SECTION: Record<string, number> = {
-  'Seq Scan': 20,
-  'Sequential Scan': 20,
-  'Index Scan': 20,
-  'Index Only Scan': 20,
-  'Bitmap Index Scan': 20,
-  'Bitmap Heap Scan': 20,
-  'Tid Scan': 20,
-  'BitmapAnd': 20,
-  'BitmapOr': 20,
+  // Index access methods → 21. Indexes — Theory & Practice
+  'Seq Scan': 21,
+  'Sequential Scan': 21,
+  'Index Scan': 21,
+  'Index Only Scan': 21,
+  'Bitmap Index Scan': 21,
+  'Bitmap Heap Scan': 21,
+  'Tid Scan': 21,
+  'BitmapAnd': 21,
+  'BitmapOr': 21,
+  'Parallel Seq Scan': 21,
 
-  'Nested Loop': 22,
-  'Hash Join': 22,
-  'Merge Join': 22,
-  'Hash': 22,
+  // Join strategies → 23. Joins
+  'Nested Loop': 23,
+  'Hash Join': 23,
+  'Merge Join': 23,
+  'Hash': 23,
 
-  'Subquery Scan': 23,
-  'SubPlan': 23,
-  'Result': 23,
+  // Subqueries → 24. Subqueries
+  'Subquery Scan': 24,
+  'SubPlan': 24,
+  'Result': 24,
 
-  'CTE Scan': 28,
-  'WorkTable Scan': 28,
-  'Recursive Union': 28,
+  // CTEs → 29. CTEs (Common Table Expressions)
+  'CTE Scan': 29,
+  'WorkTable Scan': 29,
+  'Recursive Union': 29,
 
-  'WindowAgg': 26,
+  // Window functions → 27. Window Functions
+  'WindowAgg': 27,
 
-  'Sort': 35,
-  'Incremental Sort': 35,
-  'Aggregate': 27,
-  'GroupAggregate': 27,
-  'HashAggregate': 27,
-  'Group': 27,
+  // Sorting / performance → 36. Performance Tuning & Configuration
+  'Sort': 36,
+  'Incremental Sort': 36,
+  'Gather': 36,
+  'Gather Merge': 36,
 
-  'Materialize': 31,
-  'Memoize': 31,
+  // Grouping / aggregation → 28. Grouping Sets, ROLLUP & CUBE
+  'Aggregate': 28,
+  'GroupAggregate': 28,
+  'HashAggregate': 28,
+  'Group': 28,
 
-  'Append': 30,
-  'Merge Append': 30,
-  'Partition Selector': 30,
+  // Materialisation / views → 32. Views & Materialized Views
+  'Materialize': 32,
+  'Memoize': 32,
 
-  'Gather': 35,
-  'Gather Merge': 35,
-  'Parallel Seq Scan': 20,
+  // Partitioning → 31. Table Partitioning
+  'Append': 31,
+  'Merge Append': 31,
+  'Partition Selector': 31,
 
-  'LockRows': 29,
+  // Locking → 30. Transactions & Concurrency Control
+  'LockRows': 30,
+
+  // Storage internals → 20. Storage Internals — Pages, Disks & MVCC
+  'Heap Fetch': 20,
+
+  // Full-text search → 19. Full-Text Search
+  'BitmapOr FTS': 19,
 };
 
 export function sectionForNodeType(nodeType: string): SectionRef | null {
@@ -112,9 +160,9 @@ export function recommendSectionsForPlan(plan: any): RecommendedSection[] {
     else grouped.set(ref.number, { ...ref, reasons: [t] });
   }
   // EXPLAIN & Query Analysis is universally relevant.
-  if (!grouped.has(21)) {
-    const r = byNumber.get(21);
-    if (r) grouped.set(21, { ...r, reasons: ['EXPLAIN output'] });
+  if (!grouped.has(22)) {
+    const r = byNumber.get(22);
+    if (r) grouped.set(22, { ...r, reasons: ['EXPLAIN output'] });
   }
   return Array.from(grouped.values());
 }
