@@ -27,7 +27,21 @@ app.use((req, res, next) => {
 });
 
 // Security middleware
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", 'https://*.clerk.accounts.dev', 'https://*.clerk.com'],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'https:'],
+        connectSrc: ["'self'", 'https://*.clerk.accounts.dev', 'https://*.clerk.com', 'https://api.openai.com'],
+        fontSrc: ["'self'", 'https:', 'data:'],
+        frameSrc: ["'self'", 'https://*.clerk.accounts.dev', 'https://*.clerk.com'],
+      },
+    },
+  }),
+);
 
 // Rate limiting - more restrictive for AI endpoints
 const limiter = rateLimit({
