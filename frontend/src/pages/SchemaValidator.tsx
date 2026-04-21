@@ -597,6 +597,15 @@ function QueryGenSection() {
               </div>
             </div>
           )}
+          {result.suggestedReadings?.length > 0 && (
+            <div>
+              <SectionHeader>
+                <BookOpen size={15} className="inline-block mr-1.5 -mt-0.5" />
+                Recommended Reading
+              </SectionHeader>
+              <SuggestedReadingsPanel readings={result.suggestedReadings} />
+            </div>
+          )}
         </div>
       )}
     </div>

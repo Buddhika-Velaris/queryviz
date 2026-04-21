@@ -305,6 +305,7 @@ export interface QueryGenerationResult {
   queries: OptimizedQuery[];
   indexes: QueryIndex[];
   notes: string;
+  suggestedReadings: SuggestedReading[];
 }
 
 export async function generateOptimalQueries(

@@ -459,6 +459,7 @@ export interface QueryGenerationResult {
   queries: OptimizedQuery[];
   indexes: QueryIndex[];
   notes: string;
+  suggestedReadings: SuggestedReading[];
 }
 
 export async function generateOptimalQueries(
@@ -478,8 +479,18 @@ Below are the authoritative PostgreSQL best-practice reference sections you MUST
 
 ${knowledgeBlock}
 
+IMPORTANT — emit keys in EXACTLY this order. suggestedReadings comes BEFORE queries and indexes so it is never dropped under any output budget.
+
 Return exactly this structure:
 {
+  "suggestedReadings": [
+    {
+      "sectionRef": "<e.g. §25>",
+      "number": <integer section number>,
+      "title": "<exact section title from the reference material above>",
+      "reason": "<one sentence: why this section is relevant to the generated queries>"
+    }
+  ],
   "queries": [
     {
       "description": "<one sentence: what this query retrieves or achieves>",
@@ -509,7 +520,8 @@ Rules:
 - If a JOIN requires a table not in the DDL, produce the best possible query and mention the missing table in notes.
 - Top-N per group (e.g. top 3 products per category, most recent order per user, co-purchased accessories): always prefer LEFT JOIN LATERAL (...) ON TRUE over correlated subqueries in SELECT or window functions with outer filtering — LATERAL is idiomatic PostgreSQL for this pattern and the planner can use indexes inside the lateral subquery.
 - Scalar subqueries in SELECT (e.g. per-row counts) execute once per row — rewrite as LEFT JOIN + GROUP BY or as LATERAL when the result set is large.
-- For co-purchase / "people also bought" patterns: aggregate co-occurring item pairs in a CTE first, then use LATERAL to pick the top-N per seed item — this avoids a full cross-product scan.`;
+- For co-purchase / "people also bought" patterns: aggregate co-occurring item pairs in a CTE first, then use LATERAL to pick the top-N per seed item — this avoids a full cross-product scan.
+- suggestedReadings: MANDATORY, 2–5 sections from the reference material above that are most relevant to the generated queries. Pick sections the user should read to understand the query patterns, index choices, or PostgreSQL features used.`;
 
   const userPrompt = relatedDdl?.trim()
     ? `Primary schema:\n${primaryDdl}\n\nRelated table DDLs (for JOINs):\n${relatedDdl}\n\nAccess patterns:\n${accessPatterns}`
