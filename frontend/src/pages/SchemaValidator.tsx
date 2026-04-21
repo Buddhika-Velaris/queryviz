@@ -668,6 +668,14 @@ export default function SchemaValidator() {
 
   return (
     <div className="max-w-5xl xl:max-w-7xl 2xl:max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+      {id && loading && !result && (
+        <div className="flex flex-col items-center justify-center py-32 gap-4">
+          <Loader2 size={28} className="text-blue-400 animate-spin" />
+          <p className="text-gray-400 text-sm">Loading record…</p>
+        </div>
+      )}
+      {id && loading && !result ? null : (
+      <>
       {/* Page header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-100 mb-1">Schema Validator</h1>
@@ -810,6 +818,8 @@ export default function SchemaValidator() {
       {/* Results */}
       {result && <ResultPanel result={result} cached={cached} />}
       {result && <QueryGenSection />}
+      </>
+      )}
     </div>
   );
 }

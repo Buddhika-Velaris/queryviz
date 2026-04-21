@@ -378,14 +378,26 @@ export type HistoryRecord =
   | SchemaValidationRecord
   | QueryGenerationRecord;
 
-export async function getHistory(type?: HistoryRecordType): Promise<HistoryRecord[]> {
+export interface HistoryPage {
+  records: HistoryRecord[];
+  hasMore: boolean;
+  nextCursor: string | null;
+}
+
+export async function getHistory(
+  type?: HistoryRecordType,
+  cursor?: string,
+  limit = 20,
+): Promise<HistoryPage> {
   try {
-    const params = type ? { type } : {};
+    const params: Record<string, string | number> = { limit };
+    if (type) params.type = type;
+    if (cursor) params.cursor = cursor;
     const response = await api.get('/history', { params });
-    return response.data.records as HistoryRecord[];
+    return response.data as HistoryPage;
   } catch (error: any) {
     // 503 = DB not yet connected — treat as empty rather than an error
-    if (error.response?.status === 503) return [];
+    if (error.response?.status === 503) return { records: [], hasMore: false, nextCursor: null };
     throw new Error(error.response?.data?.error || 'Failed to fetch history');
   }
 }

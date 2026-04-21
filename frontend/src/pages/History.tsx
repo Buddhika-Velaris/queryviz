@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, Trash2, ChevronDown, ChevronUp, BarChart2, ArrowLeftRight, ShieldCheck, Zap, RefreshCw, AlertCircle, ExternalLink } from 'lucide-react';
+import { Clock, Trash2, ChevronDown, ChevronUp, BarChart2, ArrowLeftRight, ShieldCheck, Zap, RefreshCw, AlertCircle, ExternalLink, Loader2 } from 'lucide-react';
 import {
   getHistory,
   deleteHistoryRecord,
@@ -89,8 +89,8 @@ function itemText(item: unknown): string {
 }
 
 function SingleAnalysisDetail({ record }: { record: SingleAnalysisRecord }) {
-  const analysis = record.analysis as any;
-  const metrics = record.metrics as any;
+  const analysis = record.analysis as Record<string, any>;
+  const metrics = record.metrics as Record<string, any>;
   return (
     <div className="space-y-4">
       <DetailBlock
@@ -190,7 +190,7 @@ function SchemaValidationDetail({ record }: { record: SchemaValidationRecord }) 
           label={`Findings (${r.findings.length})`}
           value={
             <ul className="space-y-1">
-              {r.findings.map((f, i) => (
+              {(r.findings as any[]).map((f: Record<string, any>, i: number) => (
                 <li key={i} className="flex items-start gap-1.5 text-gray-300">
                   <span className={`mt-0.5 shrink-0 text-xs font-bold uppercase ${
                     f.severity === 'critical' ? 'text-red-400' :
@@ -221,7 +221,7 @@ function QueryGenerationDetail({ record }: { record: QueryGenerationRecord }) {
           label={`Generated queries (${r.queries.length})`}
           value={
             <div className="space-y-3">
-              {r.queries.map((q, i) => (
+              {(r.queries as any[]).map((q: Record<string, any>, i: number) => (
                 <div key={i} className="space-y-1.5">
                   <p className="text-xs text-amber-400 font-medium">{q.description}</p>
                   <PreBlock code={q.sql} />
@@ -236,7 +236,7 @@ function QueryGenerationDetail({ record }: { record: QueryGenerationRecord }) {
           label={`Recommended indexes (${r.indexes.length})`}
           value={
             <div className="space-y-2">
-              {r.indexes.map((idx, i) => (
+              {(r.indexes as any[]).map((idx: Record<string, any>, i: number) => (
                 <div key={i} className="flex items-start gap-2">
                   <span className={`shrink-0 text-xs font-bold uppercase mt-0.5 ${
                     idx.impact === 'critical' ? 'text-red-400' :
@@ -386,15 +386,23 @@ const TABS: { key: FilterTab; label: string }[] = [
 export default function History() {
   const [records, setRecords] = useState<HistoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<FilterTab>('all');
+  const [hasMore, setHasMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
+  // Initial / tab-change load — resets the list
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setNextCursor(null);
     try {
-      const data = await getHistory(tab === 'all' ? undefined : tab);
-      setRecords(data);
+      const page = await getHistory(tab === 'all' ? undefined : tab);
+      setRecords(page.records);
+      setHasMore(page.hasMore);
+      setNextCursor(page.nextCursor ?? null);
     } catch (err: any) {
       setError(err.message || 'Failed to load history');
     } finally {
@@ -402,18 +410,44 @@ export default function History() {
     }
   }, [tab]);
 
+  useEffect(() => { load(); }, [load]);
+
+  // Load the next page and append
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore || !nextCursor) return;
+    setLoadingMore(true);
+    try {
+      const page = await getHistory(tab === 'all' ? undefined : tab, nextCursor);
+      setRecords((prev) => [...prev, ...page.records]);
+      setHasMore(page.hasMore);
+      setNextCursor(page.nextCursor ?? null);
+    } catch {
+      // silently ignore — user can scroll again
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, hasMore, nextCursor, tab]);
+
+  // IntersectionObserver — fires loadMore when sentinel enters the viewport
   useEffect(() => {
-    load();
-  }, [load]);
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting) loadMore(); },
+      { threshold: 0.1 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [loadMore]);
 
   function handleDelete(record: HistoryRecord) {
-    // Optimistically remove from UI
     setRecords((prev) => prev.filter((r) => r._id !== record._id));
     deleteHistoryRecord(record.recordType, record._id).catch(() => {
-      // Re-add on failure
-      setRecords((prev) => [record, ...prev].sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-      ));
+      setRecords((prev) =>
+        [record, ...prev].sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        ),
+      );
     });
   }
 
@@ -445,9 +479,7 @@ export default function History() {
             key={key}
             onClick={() => setTab(key)}
             className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-medium transition-colors ${
-              tab === key
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-400 hover:text-gray-200'
+              tab === key ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
             }`}
           >
             {label}
@@ -465,10 +497,7 @@ export default function History() {
         <div className="flex flex-col items-center justify-center py-20 text-red-400 gap-3">
           <AlertCircle size={20} />
           <p className="text-sm">{error}</p>
-          <button
-            onClick={load}
-            className="text-xs underline text-gray-400 hover:text-gray-200"
-          >
+          <button onClick={load} className="text-xs underline text-gray-400 hover:text-gray-200">
             Try again
           </button>
         </div>
@@ -483,9 +512,21 @@ export default function History() {
           {records.map((record) => (
             <HistoryCard key={record._id} record={record} onDelete={handleDelete} />
           ))}
-          <p className="text-center text-xs text-gray-700 pt-2">
-            Showing {records.length} most recent record{records.length !== 1 ? 's' : ''}
-          </p>
+
+          {/* Infinite scroll sentinel */}
+          <div ref={sentinelRef} className="h-4" />
+
+          {loadingMore && (
+            <div className="flex justify-center py-4">
+              <Loader2 size={18} className="text-gray-500 animate-spin" />
+            </div>
+          )}
+
+          {!hasMore && records.length > 0 && (
+            <p className="text-center text-xs text-gray-700 pt-2">
+              {records.length} record{records.length !== 1 ? 's' : ''} total
+            </p>
+          )}
         </div>
       )}
     </div>

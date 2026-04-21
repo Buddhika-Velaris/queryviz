@@ -21,8 +21,8 @@ const MODEL_MAP: Record<RecordType, mongoose.Model<any>> = {
 };
 
 // ─── GET /api/history ─────────────────────────────────────────────────────────
-// Returns the last 50 records for the authenticated user across all types
-// Optional query param: ?type=single_analysis|comparison|schema_validation|query_generation
+// Cursor-based pagination: ?type=...&limit=20&cursor=<ISO-date>_<id>
+// Returns { records, hasMore, nextCursor }
 
 router.get('/', async (req: Request, res: Response) => {
   const userId = req.velarisUser?.userId;
@@ -33,19 +33,39 @@ router.get('/', async (req: Request, res: Response) => {
   }
 
   const typeFilter = req.query.type as string | undefined;
+  const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 20, 1), 100);
+  const cursor = req.query.cursor as string | undefined; // format: "<ISO>_<id>"
+
+  // Parse cursor into { createdAt, _id }
+  let cursorDate: Date | null = null;
+  let cursorId: string | null = null;
+  if (cursor) {
+    const sep = cursor.lastIndexOf('_');
+    if (sep > 0) {
+      cursorDate = new Date(cursor.slice(0, sep));
+      cursorId = cursor.slice(sep + 1);
+    }
+  }
 
   try {
-    // Determine which models to query
     const typesToFetch: RecordType[] = typeFilter && ALLOWED_TYPES.includes(typeFilter as RecordType)
       ? [typeFilter as RecordType]
       : [...ALLOWED_TYPES];
 
-    // Fetch from each model concurrently, limit 50 per type then merge + sort client-side
-    const perModelLimit = 50;
+    // Per-model: fetch limit+1 so we can detect hasMore after merging
+    const perModelLimit = limit + 1;
     const fetches = typesToFetch.map(async (type) => {
+      const query: any = { userId };
+      if (cursorDate && cursorId) {
+        // Records older than cursor (strictly before, or same time with smaller _id)
+        query.$or = [
+          { createdAt: { $lt: cursorDate } },
+          { createdAt: cursorDate, _id: { $lt: cursorId } },
+        ];
+      }
       const docs = await MODEL_MAP[type]
-        .find({ userId })
-        .sort({ createdAt: -1 })
+        .find(query)
+        .sort({ createdAt: -1, _id: -1 })
         .limit(perModelLimit)
         .lean()
         .exec();
@@ -55,10 +75,20 @@ router.get('/', async (req: Request, res: Response) => {
     const arrays = await Promise.all(fetches);
     const merged = arrays
       .flat()
-      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 50);
+      .sort((a: any, b: any) => {
+        const dt = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        if (dt !== 0) return dt;
+        return String(b._id).localeCompare(String(a._id));
+      });
 
-    res.json({ records: merged });
+    const page = merged.slice(0, limit);
+    const hasMore = merged.length > limit;
+    const last = page[page.length - 1];
+    const nextCursor = hasMore && last
+      ? `${new Date(last.createdAt).toISOString()}_${last._id}`
+      : null;
+
+    res.json({ records: page, hasMore, nextCursor });
   } catch (err: any) {
     console.error('[history] GET / error:', err.message);
     res.status(500).json({ error: 'Failed to fetch history' });

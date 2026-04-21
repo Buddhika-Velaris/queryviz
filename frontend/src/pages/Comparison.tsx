@@ -4,7 +4,7 @@ import MetricsSummary from '../components/MetricsSummary';
 import PlanVisualization from '../components/PlanVisualization';
 import LLMAnalysis from '../components/LLMAnalysis';
 import { comparePlans, getHistoryRecord, type ComparisonRecord } from '../services/api';
-import { AlertCircle, Lightbulb, Trash2 } from 'lucide-react';
+import { AlertCircle, Lightbulb, Loader2, Trash2 } from 'lucide-react';
 import { useParams } from 'react-router-dom';
 import { useAnalysisStore } from '../store/analysisStore';
 
@@ -58,6 +58,14 @@ export default function Comparison() {
 
   return (
     <div className="max-w-5xl xl:max-w-7xl 2xl:max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+      {id && loading && !result && (
+        <div className="flex flex-col items-center justify-center py-32 gap-4">
+          <Loader2 size={28} className="text-blue-400 animate-spin" />
+          <p className="text-gray-400 text-sm">Loading comparison…</p>
+        </div>
+      )}
+      {id && loading && !result ? null : (
+      <>
       {/* Page header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-100 mb-1">Compare Query Plans</h1>
@@ -213,6 +221,8 @@ export default function Comparison() {
             </div>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   );
