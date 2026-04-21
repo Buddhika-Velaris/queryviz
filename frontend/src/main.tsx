@@ -24,6 +24,14 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           colorInputBackground: '#1e293b',
           colorInputText: '#f1f5f9',
         },
+        elements: {
+          socialButtonsBlockButton: {
+            color: '#f1f5f9',
+          },
+          socialButtonsBlockButtonText: {
+            color: '#f1f5f9',
+          },
+        },
       }}
     >
       <BrowserRouter>
