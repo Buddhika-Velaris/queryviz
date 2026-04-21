@@ -58,8 +58,8 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// API routes — /learn is public; /analyze and /validate require @velaris.io
-app.use('/api/learn', learnRouter);
+// API routes — all AI endpoints require @velaris.io
+app.use('/api/learn', requireVelarisUser, learnRouter);
 app.use('/api/analyze', requireVelarisUser, analyzeRouter);
 app.use('/api/validate', requireVelarisUser, validateRouter);
 

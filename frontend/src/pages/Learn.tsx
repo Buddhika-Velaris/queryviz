@@ -1,14 +1,19 @@
-import { useState, useMemo, useEffect, useRef, ReactNode, Children } from 'react';
+import { useState, useMemo, useEffect, useRef, ReactNode, Children, createContext, useContext } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useUser } from '@clerk/clerk-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import {
   BookOpen, Search, ChevronRight, Sparkles, Send, Loader2, MessageCircle, X,
-  Brain, FlaskConical, Layers, Check, RotateCcw, Eye, EyeOff,
+  Brain, FlaskConical, Layers, Check, RotateCcw, Eye, EyeOff, Lock,
 } from 'lucide-react';
 import content from '../../../knowledge.md?raw';
+
+// Context that gates AI-powered features to @velaris.io users only.
+const VelarisUserCtx = createContext(false);
+const VELARIS_DOMAIN = '@velaris.io';
 import {
   summarizeSection, askAboutSection, explainTerm,
   generateQuiz, generateScenario, gradeSqlAttempt, generateFlashcards,
@@ -61,12 +66,21 @@ const GLOSSARY_REGEX = new RegExp(
 );
 
 function GlossaryTerm({ term, sectionTitle }: { term: string; sectionTitle?: string }) {
+  const isVelarisUser = useContext(VelarisUserCtx);
   const [open, setOpen] = useState(false);
   const [explanation, setExplanation] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const cacheRef = useRef<Map<string, string>>(
     (GlossaryTerm as any)._cache ?? ((GlossaryTerm as any)._cache = new Map()),
   );
+
+  if (!isVelarisUser) {
+    return (
+      <span className="border-b border-dotted border-gray-600/50 text-gray-400 cursor-default">
+        {term}
+      </span>
+    );
+  }
 
   async function load() {
     const key = term.toLowerCase();
@@ -146,11 +160,13 @@ function decorateGlossary(children: ReactNode, sectionTitle?: string): ReactNode
 
 // ─── TL;DR summary panel ─────────────────────────────────────────────────────
 function SummaryPanel({ section }: { section: Section }) {
+  const isVelarisUser = useContext(VelarisUserCtx);
   const [data, setData] = useState<SectionSummaryData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!isVelarisUser) return;
     let cancelled = false;
     const cacheKey = `learn-summary:${section.id}`;
 
@@ -177,6 +193,22 @@ function SummaryPanel({ section }: { section: Section }) {
 
     return () => { cancelled = true; };
   }, [section.id, section.title, section.content]);
+
+  if (!isVelarisUser) {
+    return (
+      <div className="mb-6 rounded-xl border border-gray-700/40 bg-gray-900/30 p-4">
+        <div className="flex items-center gap-2 mb-1.5">
+          <Sparkles size={13} className="text-gray-600" />
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">AI summary</span>
+          <Lock size={11} className="text-gray-600 ml-auto" />
+        </div>
+        <p className="text-xs text-gray-600">
+          Available to{' '}
+          <span className="text-gray-500">{VELARIS_DOMAIN}</span> users.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="mb-6 rounded-xl border border-blue-500/25 bg-gradient-to-br from-blue-500/5 to-indigo-500/5 p-4">
@@ -216,6 +248,7 @@ interface ChatMessage {
 }
 
 function AskPanel({ section }: { section: Section }) {
+  const isVelarisUser = useContext(VelarisUserCtx);
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -248,6 +281,8 @@ function AskPanel({ section }: { section: Section }) {
       setLoading(false);
     }
   }
+
+  if (!isVelarisUser) return null;
 
   const suggestions = [
     'Explain this with a concrete example',
@@ -375,11 +410,24 @@ function AskPanel({ section }: { section: Section }) {
 
 // ─── Quiz ────────────────────────────────────────────────────────────────────
 function QuizPanel({ section }: { section: Section }) {
+  const isVelarisUser = useContext(VelarisUserCtx);
   const [questions, setQuestions] = useState<QuizQuestion[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [revealed, setRevealed] = useState(false);
+
+  if (!isVelarisUser) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <Lock size={36} className="text-gray-600 mb-3" />
+        <h3 className="text-lg font-semibold text-gray-500 mb-1">Velaris users only</h3>
+        <p className="text-sm text-gray-600 max-w-md">
+          Sign in with a <span className="text-gray-500">{VELARIS_DOMAIN}</span> account to access AI-powered quizzes.
+        </p>
+      </div>
+    );
+  }
 
   useEffect(() => { setQuestions(null); setAnswers({}); setRevealed(false); setError(null); }, [section.id]);
 
@@ -514,6 +562,7 @@ function QuizPanel({ section }: { section: Section }) {
 
 // ─── Practice sandbox ────────────────────────────────────────────────────────
 function SandboxPanel({ section }: { section: Section }) {
+  const isVelarisUser = useContext(VelarisUserCtx);
   const [scenario, setScenario] = useState<PracticeScenario | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -521,6 +570,18 @@ function SandboxPanel({ section }: { section: Section }) {
   const [grade, setGrade] = useState<PracticeGrade | null>(null);
   const [grading, setGrading] = useState(false);
   const [showHints, setShowHints] = useState(false);
+
+  if (!isVelarisUser) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <Lock size={36} className="text-gray-600 mb-3" />
+        <h3 className="text-lg font-semibold text-gray-500 mb-1">Velaris users only</h3>
+        <p className="text-sm text-gray-600 max-w-md">
+          Sign in with a <span className="text-gray-500">{VELARIS_DOMAIN}</span> account to access the AI practice sandbox.
+        </p>
+      </div>
+    );
+  }
 
   useEffect(() => { setScenario(null); setAttempt(''); setGrade(null); setError(null); setShowHints(false); }, [section.id]);
 
@@ -719,6 +780,7 @@ function intervalFor(ease: number, prev?: CardState): number {
 }
 
 function FlashcardsPanel({ section }: { section: Section }) {
+  const isVelarisUser = useContext(VelarisUserCtx);
   const stateKey = `learn-flashcards-state:${section.id}`;
   const cardsKey = `learn-flashcards:${section.id}`;
 
@@ -728,6 +790,18 @@ function FlashcardsPanel({ section }: { section: Section }) {
   const [error, setError] = useState<string | null>(null);
   const [idx, setIdx] = useState(0);
   const [flipped, setFlipped] = useState(false);
+
+  if (!isVelarisUser) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <Lock size={36} className="text-gray-600 mb-3" />
+        <h3 className="text-lg font-semibold text-gray-500 mb-1">Velaris users only</h3>
+        <p className="text-sm text-gray-600 max-w-md">
+          Sign in with a <span className="text-gray-500">{VELARIS_DOMAIN}</span> account to access AI-generated flashcards.
+        </p>
+      </div>
+    );
+  }
 
   // Load from localStorage on mount / section change.
   useEffect(() => {
@@ -921,6 +995,11 @@ function WorkedExamplePanel({ section }: { section: Section }) {
 type LearnTab = 'read' | 'quiz' | 'sandbox' | 'flashcards';
 
 export default function Learn() {
+  const { user, isLoaded } = useUser();
+  const isVelarisUser =
+    isLoaded &&
+    (user?.primaryEmailAddress?.emailAddress?.toLowerCase().endsWith(VELARIS_DOMAIN) ?? false);
+
   const sections = useMemo(() => parseSections(content), []);
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedSection = searchParams.get('section');
@@ -957,6 +1036,7 @@ export default function Learn() {
   const current = sections.find(s => s.id === activeId);
 
   return (
+    <VelarisUserCtx.Provider value={isVelarisUser}>
     <div className="flex h-[calc(100vh-56px)]">
       {/* ── Sidebar ── */}
       <aside className="w-72 flex-shrink-0 border-r border-gray-800 flex flex-col bg-gray-900/50">
@@ -1218,6 +1298,7 @@ export default function Learn() {
         {current && tab === 'read' && <AskPanel section={current} />}
       </main>
     </div>
+    </VelarisUserCtx.Provider>
   );
 }
 
