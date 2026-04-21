@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Clock, Trash2, ChevronDown, ChevronUp, BarChart2, ArrowLeftRight, ShieldCheck, Zap, RefreshCw, AlertCircle, ExternalLink, Loader2 } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { Clock, Trash2, ChevronDown, ChevronUp, BarChart2, ArrowLeftRight, ShieldCheck, Zap, RefreshCw, AlertCircle, ExternalLink, Loader2, BookOpen } from 'lucide-react';
 import {
   getHistory,
   deleteHistoryRecord,
@@ -10,6 +10,7 @@ import {
   type ComparisonRecord,
   type SchemaValidationRecord,
   type QueryGenerationRecord,
+  type SuggestedReading,
 } from '../services/api';
 
 // ─── Type metadata ─────────────────────────────────────────────────────────────
@@ -250,6 +251,31 @@ function QueryGenerationDetail({ record }: { record: QueryGenerationRecord }) {
         />
       )}
       <DetailBlock label="Access patterns" value={<PreBlock code={record.accessPatterns} />} />
+      {r.suggestedReadings?.length > 0 && (
+        <DetailBlock
+          label="Recommended reading"
+          value={
+            <div className="space-y-2">
+              {(r.suggestedReadings as SuggestedReading[]).map((s) => (
+                <Link
+                  key={s.number}
+                  to={`/learn#section-${s.number}`}
+                  className="flex items-start gap-2.5 p-3 rounded-lg border border-gray-700 bg-gray-800/50 hover:border-purple-500/40 hover:bg-purple-500/5 transition-colors group"
+                >
+                  <div className="w-7 h-7 rounded-md bg-purple-500/10 border border-purple-500/20 flex items-center justify-center flex-shrink-0">
+                    <span className="text-purple-400 text-xs font-bold">{s.sectionRef}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-gray-200 text-xs font-semibold group-hover:text-purple-300 transition-colors">{s.title}</p>
+                    <p className="text-gray-500 text-xs mt-0.5 leading-relaxed">{s.reason}</p>
+                  </div>
+                  <BookOpen size={12} className="text-gray-600 group-hover:text-purple-400 flex-shrink-0 mt-0.5 transition-colors" />
+                </Link>
+              ))}
+            </div>
+          }
+        />
+      )}
     </div>
   );
 }

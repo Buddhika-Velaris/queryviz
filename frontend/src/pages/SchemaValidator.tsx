@@ -826,7 +826,7 @@ export default function SchemaValidator() {
 
       {/* Results */}
       {result && <ResultPanel result={result} cached={cached} />}
-      {result && <QueryGenSection />}
+      {(result || location.pathname.startsWith('/querygen')) && <QueryGenSection />}
       </>
       )}
     </div>
