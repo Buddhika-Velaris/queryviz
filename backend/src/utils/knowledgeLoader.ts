@@ -195,6 +195,9 @@ const QUERY_CORE_SECTIONS = [
   7,   // Numeric & ID Types
   21,  // Indexes — Theory & Practice
   22,  // EXPLAIN & Query Analysis
+  23,  // Joins — fundamental to any multi-table query
+  24,  // Subqueries — derived tables, scalar subqueries, EXISTS, IN
+  25,  // Lateral Joins — top-N per group, most-recent per entity
   43,  // Anti-Patterns to Avoid
 ];
 
@@ -210,17 +213,17 @@ const QUERY_CONDITIONAL_SECTIONS: { section: number; pattern: RegExp }[] = [
   // §15 Arrays — array_agg, unnest, ANY
   { section: 15, pattern: /\barray_agg\b|\bunnest\b|\bany\s*\(|\ball\s*\(|\w+\[\]|\barray\[/i },
 
-  // §19 Full-Text Search — to_tsvector, ts_rank, plainto_tsquery
-  { section: 19, pattern: /\b(tsvector|tsquery|to_tsvector|to_tsquery|plainto_tsquery|ts_rank|@@@|@@)/i },
+  // §19 Full-Text Search — FTS function names OR semantic search/keyword language
+  { section: 19, pattern: /\b(tsvector|tsquery|to_tsvector|to_tsquery|plainto_tsquery|websearch_to_tsquery|ts_rank|ts_headline|@@@|@@)\b|\bfull.?text\s+search\b|\bkeyword\s+search\b|\bsearch\s+(by\s+)?(name|title|description|body|content|keyword|query|term)\b|\bsearch\s+product|\bproduct\s+search\b|\bsearch\s+for\b|\bfuzzy\s+search\b|\btrigram\b|\bpg_trgm\b|\bilike\b|\bstemm|\bgin\s+index\b|\bfts\b/i },
 
-  // §23 Joins — any mention of joining, joining tables, foreign key traversal
-  { section: 23, pattern: /\bjoin\b|\bleft\s+join\b|\binner\s+join\b|\bcross\s+join\b|\bfull\s+outer\b/i },
+  // §23 Joins — explicit join keywords OR multi-table / relationship language in access patterns
+  { section: 23, pattern: /\bjoin\b|\bleft\s+join\b|\binner\s+join\b|\bcross\s+join\b|\bfull\s+outer\b|\banti.?join\b|\bself.?join\b|\brelat|\bforeign\s+key|\bfk\b/i },
 
-  // §24 Subqueries — correlated subqueries, IN/NOT IN/EXISTS
-  { section: 24, pattern: /\bsubquer\b|\bexists\s*\(|\bnot\s+exists\b|\bin\s*\(select|\bnot\s+in\b/i },
+  // §24 Subqueries — SQL keywords OR semantic phrases describing derived/scalar/filter patterns
+  { section: 24, pattern: /\bsubquer\b|\bexists\s*\(|\bnot\s+exists\b|\bin\s*\(select|\bnot\s+in\b|\bderived\s+table\b|\bscalar\b|\bcorrelat|\baggregate.*filter|\bfilter.*aggregate|\baverage.*where|\bwhere.*average/i },
 
-  // §25 Lateral Joins — lateral, unnest in FROM
-  { section: 25, pattern: /\blateral\b/i },
+  // §25 Lateral Joins — explicit keyword OR semantic top-N / most-recent / per-group patterns
+  { section: 25, pattern: /\blateral\b|\btop[\s-]?\d+\s+per\b|\btop[\s-]?n\b|\bmost[\s-]recent\b|\blatest\s+per\b|\bper[\s-](user|customer|product|order|group|category|entity)\b|\bper[\s-]row\b|\bco[\s-]?purchas|\bfrequently\s+bought|\bpeople\s+(also|who)\b|\brecommend/i },
 
   // §26 SET Operations — UNION, INTERSECT, EXCEPT
   { section: 26, pattern: /\bunion\b|\bintersect\b|\bexcept\b/i },

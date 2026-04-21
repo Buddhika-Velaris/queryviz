@@ -506,7 +506,10 @@ Rules:
 - Add INCLUDE columns for hot covering-index paths.
 - impact levels — critical: missing this causes a seq scan on a large table; recommended: significant gain; optional: minor gain.
 - Never invent columns, tables, or types not present in the provided DDL.
-- If a JOIN requires a table not in the DDL, produce the best possible query and mention the missing table in notes.`;
+- If a JOIN requires a table not in the DDL, produce the best possible query and mention the missing table in notes.
+- Top-N per group (e.g. top 3 products per category, most recent order per user, co-purchased accessories): always prefer LEFT JOIN LATERAL (...) ON TRUE over correlated subqueries in SELECT or window functions with outer filtering — LATERAL is idiomatic PostgreSQL for this pattern and the planner can use indexes inside the lateral subquery.
+- Scalar subqueries in SELECT (e.g. per-row counts) execute once per row — rewrite as LEFT JOIN + GROUP BY or as LATERAL when the result set is large.
+- For co-purchase / "people also bought" patterns: aggregate co-occurring item pairs in a CTE first, then use LATERAL to pick the top-N per seed item — this avoids a full cross-product scan.`;
 
   const userPrompt = relatedDdl?.trim()
     ? `Primary schema:\n${primaryDdl}\n\nRelated table DDLs (for JOINs):\n${relatedDdl}\n\nAccess patterns:\n${accessPatterns}`
