@@ -33,7 +33,7 @@ router.get('/', async (req: Request, res: Response) => {
   }
 
   const typeFilter = req.query.type as string | undefined;
-  const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 20, 1), 100);
+  const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 10, 1), 100);
   const cursor = req.query.cursor as string | undefined; // format: "<ISO>_<id>"
 
   // Parse cursor into { createdAt, _id }

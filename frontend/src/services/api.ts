@@ -387,7 +387,7 @@ export interface HistoryPage {
 export async function getHistory(
   type?: HistoryRecordType,
   cursor?: string,
-  limit = 20,
+  limit = 10,
 ): Promise<HistoryPage> {
   try {
     const params: Record<string, string | number> = { limit };
