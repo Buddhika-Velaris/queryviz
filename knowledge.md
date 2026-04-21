@@ -27,29 +27,30 @@ This guide was created based on the source **Mastering Postgres** (by Aaron Fran
 17. [Generated Columns](#17-generated-columns)
 18. [Composite & Enum Types](#18-composite-enum-types)
 19. [Full-Text Search](#19-full-text-search)
-20. [Indexes — Theory & Practice](#20-indexes-theory-practice)
-21. [EXPLAIN & Query Analysis](#21-explain-query-analysis)
-22. [Joins](#22-joins)
-23. [Subqueries](#23-subqueries)
-24. [Lateral Joins](#24-lateral-joins)
-25. [SET Operations & Combining Queries](#25-set-operations-combining-queries)
-26. [Window Functions](#26-window-functions)
-27. [Grouping Sets, ROLLUP & CUBE](#27-grouping-sets-rollup-cube)
-28. [CTEs (Common Table Expressions)](#28-ctes-common-table-expressions)
-29. [Transactions & Concurrency Control](#29-transactions-concurrency-control)
-30. [Table Partitioning](#30-table-partitioning)
-31. [Views & Materialized Views](#31-views-materialized-views)
-32. [Stored Procedures & Functions](#32-stored-procedures-functions)
-33. [Triggers & Event-Driven Logic](#33-triggers-event-driven-logic)
-34. [Roles, Privileges & Row-Level Security](#34-roles-privileges-row-level-security)
-35. [Performance Tuning & Configuration](#35-performance-tuning-configuration)
-36. [Vacuum, Autovacuum & Bloat Management](#36-vacuum-autovacuum-bloat-management)
-37. [Backup, Recovery & Replication](#37-backup-recovery-replication)
-38. [Extensions](#38-extensions)
-39. [pgvector & Semantic Search](#39-pgvector-semantic-search)
-40. [Utility Patterns & Recipes](#40-utility-patterns-recipes)
-41. [Quick Reference Cheatsheet](#41-quick-reference-cheatsheet)
-42. [Anti-Patterns to Avoid](#42-anti-patterns-to-avoid)
+20. [Storage Internals — Pages, Disks & MVCC](#20-storage-internals--pages-disks--mvcc)
+21. [Indexes — Theory & Practice](#21-indexes--theory--practice)
+22. [EXPLAIN & Query Analysis](#22-explain--query-analysis)
+23. [Joins](#23-joins)
+24. [Subqueries](#24-subqueries)
+25. [Lateral Joins](#25-lateral-joins)
+26. [SET Operations & Combining Queries](#26-set-operations--combining-queries)
+27. [Window Functions](#27-window-functions)
+28. [Grouping Sets, ROLLUP & CUBE](#28-grouping-sets-rollup--cube)
+29. [CTEs (Common Table Expressions)](#29-ctes-common-table-expressions)
+30. [Transactions & Concurrency Control](#30-transactions--concurrency-control)
+31. [Table Partitioning](#31-table-partitioning)
+32. [Views & Materialized Views](#32-views--materialized-views)
+33. [Stored Procedures & Functions](#33-stored-procedures--functions)
+34. [Triggers & Event-Driven Logic](#34-triggers--event-driven-logic)
+35. [Roles, Privileges & Row-Level Security](#35-roles-privileges--row-level-security)
+36. [Performance Tuning & Configuration](#36-performance-tuning--configuration)
+37. [Vacuum, Autovacuum & Bloat Management](#37-vacuum-autovacuum--bloat-management)
+38. [Backup, Recovery & Replication](#38-backup-recovery--replication)
+39. [Extensions](#39-extensions)
+40. [pgvector & Semantic Search](#40-pgvector--semantic-search)
+41. [Utility Patterns & Recipes](#41-utility-patterns--recipes)
+42. [Quick Reference Cheatsheet](#42-quick-reference-cheatsheet)
+43. [Anti-Patterns to Avoid](#43-anti-patterns-to-avoid)
 
 ---
 
@@ -2414,7 +2415,303 @@ SELECT * FROM products WHERE name ILIKE '%search%';  -- now uses the GIN index
 
 ---
 
-## 20. Indexes — Theory & Practice
+## 20. Storage Internals — Pages, Disks & MVCC
+
+### 🌍 When You'll Use This in the Real World
+
+- **Debugging a mysteriously slow query**: "Why is this simple `WHERE created_at > ...` slow?" — usually answered by understanding page layout, physical correlation, and whether pages are hitting the buffer pool or the disk.
+- **Choosing a primary key for a write-heavy table**: UUID v4 vs BIGINT IDENTITY is really a question about page splits and buffer-pool locality, not about "uniqueness guarantees".
+- **Sizing a production server**: `shared_buffers`, `work_mem`, and `effective_cache_size` are all decisions about the relationship between your working set, page size, and the OS page cache.
+- **Diagnosing bloat and autovacuum tuning**: Dead tuples, HOT updates, and the visibility map only make sense once you know how MVCC stores row versions on pages.
+- **Understanding why an UPDATE feels expensive**: Every non-HOT UPDATE touches every index; every UPDATE writes a WAL record; large JSONB updates rewrite TOAST chunks. The "why" lives at the storage layer.
+
+> **Almost every PostgreSQL performance question collapses to five primitives: files on disk, 8KB pages, tuples, the buffer pool, and the WAL.** The rest of the indexing and query-planning chapters build directly on this mental model.
+
+Before you can reason about indexes, query plans, or vacuum tuning, you need a working picture of what the database is actually doing when it reads and writes rows. This chapter is that picture.
+
+---
+
+### 1. Everything is a File, Everything is a Page
+
+Every table and every index is stored on disk as one or more files in `$PGDATA/base/<db_oid>/`. Each file is carved into fixed-size **pages** (also called **blocks**) of 8KB by default.
+
+```sql
+-- Find the on-disk file path for a table
+SELECT pg_relation_filepath('orders');
+-- base/16384/24601
+
+-- See how many pages (8KB blocks) a table uses
+SELECT relname, relpages, reltuples
+FROM pg_class
+WHERE relname = 'orders';
+```
+
+A page is the **smallest unit of I/O**. PostgreSQL never reads or writes half a page — it always pulls a full 8KB block from disk into memory, modifies it, and writes it back. This is why:
+
+- A row that fits in 80 bytes still costs one page read.
+- Scanning 1 million rows means reading ~`ceil(1_000_000 * avg_row_size / 8192)` pages.
+- Making rows narrower (fewer / smaller columns) directly translates to fewer page reads.
+
+Tables bigger than 1GB are **split into multiple 1GB segment files** (`24601`, `24601.1`, `24601.2`, …). From PostgreSQL's perspective these are one logical file of sequentially numbered pages (page 0 to N); the segmentation is a filesystem workaround, not a storage model.
+
+### 2. How Disks Actually Store Pages — And Why a Table Isn't Contiguous
+
+The storage model above treats a table as a tidy sequence of pages. Physically, **it almost never is.** Understanding why requires looking one layer lower.
+
+**How the underlying storage sees I/O**
+
+| Medium | How a read works | Sequential vs random |
+|---|---|---|
+| **HDD** | Arm physically moves to track (seek, ~5–10ms), platter rotates to sector (~4ms), data streams off | Sequential reads 100–200MB/s; random reads 1–2MB/s — **100× slower** |
+| **SATA SSD** | Controller looks up LBA → flash page, reads the flash cell | Sequential ~550MB/s; random 4K ~50–100MB/s — 5–10× slower |
+| **NVMe SSD** | Same, but parallel queues over PCIe | Sequential ~3–7GB/s; random 4K ~1–2GB/s — 2–4× slower |
+| **Cloud block storage (EBS/PD)** | Network round-trip per I/O | Sequential bandwidth is capped; random IOPS is the usual bottleneck |
+
+Even on NVMe, sequential wins. The OS page cache and kernel **readahead** amplify this: when it sees two consecutive reads, it prefetches the next 128KB–1MB for free. Random reads get none of that.
+
+This is the hardware reason "page count" matters more than "row count" and why scanning **contiguous** pages is so much cheaper than fetching scattered ones.
+
+**Why a PostgreSQL table ends up scattered**
+
+A table's pages look contiguous to PostgreSQL — page 0, 1, 2, …, N — but the filesystem decides where each of those pages physically lives. Scattering happens at three different layers:
+
+1. **Filesystem fragmentation** (ext4, XFS, APFS, NTFS). When a table grows, the OS allocates whatever free blocks it can find. On a busy filesystem, page 5 might be 2GB away from page 6 on the physical platter / across different flash erase blocks. PostgreSQL asks for "page 6"; the filesystem does the LBA translation and the drive does the physical I/O.
+
+2. **PostgreSQL's page allocation for inserts — the Free Space Map (FSM).** PostgreSQL does **not** append new rows to the end of the table. When you `INSERT`, it consults the FSM (a small structure beside every table) to find **any existing page** with enough free space, and writes there:
+
+```sql
+-- The FSM for a table lives in a .fsm file next to the heap
+SELECT pg_relation_filepath('orders');                 -- base/16384/24601
+-- base/16384/24601_fsm  ← free space map
+-- base/16384/24601_vm   ← visibility map
+
+-- pg_freespacemap extension shows free space per page
+CREATE EXTENSION IF NOT EXISTS pg_freespacemap;
+SELECT * FROM pg_freespace('orders') LIMIT 10;
+--  blkno | avail
+--  ------+-------
+--    0   |  2048    ← page 0 has 2KB free
+--    1   |     0    ← page 1 full
+--    2   |  6144    ← page 2 has 6KB free ← next insert likely lands here
+```
+
+So two rows inserted back-to-back by the same transaction can land on completely different pages. The "logical" order you inserted them in has **nothing to do with** where they sit on disk.
+
+3. **UPDATE moves rows.** When an UPDATE can't do a HOT update (indexed column changed, or the page is too full), it writes the new tuple version to **some other page** — again chosen via the FSM. The old tuple stays behind as a dead tuple. So a row's physical location drifts over time every time it's updated. Rows that started on page 10 can end up on pages 10, 847, 2003, 15000 after a year of updates.
+
+**What this looks like in practice**
+
+```sql
+-- Create a fresh table and insert rows 1..1000 in order
+CREATE TABLE demo (id INT PRIMARY KEY, payload TEXT);
+INSERT INTO demo SELECT g, repeat('x', 500) FROM generate_series(1, 1000) g;
+
+-- Check physical ordering: ctid (page, slot) vs id
+SELECT ctid, id FROM demo ORDER BY id LIMIT 5;
+--  (0,1)  1
+--  (0,2)  2
+--  ...      ← so far so good, correlation = 1.0
+
+-- Now update half the rows (doubling the payload forces off-page moves)
+UPDATE demo SET payload = repeat('y', 2000) WHERE id % 2 = 0;
+
+SELECT ctid, id FROM demo ORDER BY id LIMIT 10;
+--  (0,1)     1      ← untouched, still on page 0
+--  (143,3)   2      ← moved far away
+--  (0,3)     3      ← still page 0
+--  (144,1)   4      ← moved
+--  ...              ← correlation collapses to ~0.2
+```
+
+**Measuring scatter: the `correlation` statistic**
+
+PostgreSQL tracks how well a column's logical order matches the physical page order as a value in `[-1, 1]`:
+
+```sql
+SELECT attname, correlation
+FROM pg_stats
+WHERE tablename = 'orders';
+--  id          |  0.99    ← near-perfect physical ordering → great for range scans
+--  user_id     |  0.02    ← essentially random physical placement
+--  created_at  |  0.97    ← append-only inserts preserve ordering
+```
+
+- `correlation ≈ 1.0` → rows ordered by this column are also consecutive on disk → range scans read contiguous pages → cheap.
+- `correlation ≈ 0.0` → rows are scattered → a range query has to fetch one page here, one page there → random I/O.
+
+**This is exactly why the same B-tree index can be fast or slow depending on the underlying table:**
+
+- `WHERE created_at BETWEEN x AND y` on an append-only table → index finds 10,000 ctids, they're all on ~50 consecutive pages → 50 sequential page reads.
+- `WHERE user_id = 42` on a busy table → index finds 10,000 ctids, scattered across 10,000 different pages → 10,000 **random** page reads.
+
+Same index, same number of matches, **100× difference** in I/O cost. It's why the planner sometimes prefers a sequential scan over a "perfect" index — it knows random fetches on a low-correlation column would be worse than streaming the whole table.
+
+**Re-clustering physical order**
+
+When physical scatter hurts a critical query, you can rewrite the table in index order:
+
+```sql
+-- One-time physical reorder by index (takes an ACCESS EXCLUSIVE lock — blocks all reads/writes)
+CLUSTER orders USING idx_orders_created_at;
+
+-- Less disruptive alternative: pg_repack (extension) — online rewrite
+-- pg_repack -t orders -i idx_orders_created_at
+
+-- Check correlation again after CLUSTER
+SELECT attname, correlation FROM pg_stats
+WHERE tablename = 'orders' AND attname = 'created_at';
+--  created_at | 1.00   ← now physically sorted
+```
+
+CLUSTER is a **one-shot** operation — future inserts and updates will scatter again. You don't cluster as a maintenance ritual; you cluster when a specific high-value query's physical access pattern has degraded.
+
+**Why BRIN indexes care about all of this**
+
+A BRIN index stores min/max of a column per block range (default 128 pages = 1MB). For a query like `WHERE created_at > now() - interval '1 day'`, BRIN can say "only block ranges 9400–9472 could contain those rows, skip everything else." That only works if **physical order correlates with logical order** — i.e. the column has correlation near 1.0. On a scrambled column, BRIN would have to read everything anyway, because every block range's min/max would span the whole column domain.
+
+> **Takeaway:** PostgreSQL's "table" is a logical abstraction. On disk it's a pile of 8KB pages that the filesystem placed wherever it pleased, into which PostgreSQL crammed rows wherever the FSM said there was room, and which UPDATE keeps sloshing around over time. Sequential access is 10–100× cheaper than random access at every layer (disk, OS cache, buffer pool), so **physical locality** — not just "having an index" — is what makes range queries fast.
+
+### 3. Anatomy of an 8KB Heap Page
+
+Every heap page has the same layout:
+
+```
+┌─────────────────────────────────────────────────┐
+│ Page Header (24 bytes)                          │
+│   - LSN, checksum, free space pointers          │
+├─────────────────────────────────────────────────┤
+│ Line Pointers (ItemIds) — 4 bytes each          │ ← grow DOWN
+│   [ptr 1][ptr 2][ptr 3]...                      │
+├─────────────────────────────────────────────────┤
+│                                                 │
+│            Free Space (middle)                  │
+│                                                 │
+├─────────────────────────────────────────────────┤
+│   ...[tuple 3][tuple 2][tuple 1]                │ ← grow UP
+│ Tuples (actual row data)                        │
+├─────────────────────────────────────────────────┤
+│ Special Space (index pages only)                │
+└─────────────────────────────────────────────────┘
+```
+
+- **Line pointers** grow top-down, **tuples** grow bottom-up. They meet in the middle. When the free space runs out, the page is "full" and new inserts go to another page.
+- A row's physical address — its `ctid` — is `(page_number, line_pointer_slot)`. That's why `ctid` can change: if the tuple is moved (UPDATE creates a new version on another page, or VACUUM FULL rewrites the table), the ctid changes.
+- Rows larger than ~2KB are stored **out of line** in a separate TOAST table (see below).
+
+```sql
+-- Peek at actual tuple locations
+SELECT ctid, id, email FROM users ORDER BY ctid LIMIT 5;
+--  (0,1)   1  alice@...
+--  (0,2)   2  bob@...
+--  (0,3)   3  carol@...   ← all on page 0
+--  (1,1)   4  dave@...    ← page 1 starts here
+```
+
+### 4. Tuples, MVCC, and Why Old Rows Don't Disappear
+
+PostgreSQL uses **MVCC (Multi-Version Concurrency Control)**. An UPDATE does **not** overwrite the row in place — it writes a **new tuple version** and marks the old one as obsolete. Each tuple carries two hidden system columns:
+
+| Column | Meaning |
+|---|---|
+| `xmin` | Transaction that **created** this tuple version |
+| `xmax` | Transaction that **deleted/updated** this version (0 if still live) |
+
+```sql
+SELECT xmin, xmax, ctid, id, balance FROM accounts WHERE id = 1;
+-- xmin=1001  xmax=0     ctid=(0,5)  balance=100   ← currently visible
+
+UPDATE accounts SET balance = 200 WHERE id = 1;
+
+SELECT xmin, xmax, ctid, id, balance FROM accounts WHERE id = 1;
+-- xmin=1002  xmax=0     ctid=(0,6)  balance=200   ← new version
+-- Old tuple at (0,5) is still on disk with xmax=1002, invisible to new txns but not yet reclaimed
+```
+
+Consequences:
+- **Readers never block writers, writers never block readers** — each transaction sees a consistent snapshot based on `xmin`/`xmax` vs. its own transaction ID.
+- **Dead tuples accumulate** until `VACUUM` reclaims their space — this is **bloat**.
+- **Every index still points to the old ctid** until VACUUM cleans up the dead tuple and the index entry.
+
+### 5. HOT Updates — The Optimization That Saves Indexes
+
+If an UPDATE changes **no indexed column** and the new tuple version **fits on the same page**, PostgreSQL performs a **HOT (Heap-Only Tuple) update**: the new version is chained from the old line pointer, and **no index needs to be updated**. This is a massive win — an UPDATE on a row with 8 indexes costs 1 write instead of 9.
+
+```sql
+-- This is HOT-eligible (balance is not indexed, fits on same page)
+UPDATE accounts SET balance = balance + 1 WHERE id = 1;
+
+-- This is NOT HOT (email is indexed — all email-index entries must update)
+UPDATE users SET email = 'new@x.com' WHERE id = 1;
+```
+
+Two things disable HOT: updating an indexed column, or the page being too full to hold the new version. Leaving `fillfactor` below 100 on write-heavy tables leaves room for HOT updates.
+
+```sql
+-- Leave 20% free space in each page for in-place updates
+ALTER TABLE accounts SET (fillfactor = 80);
+```
+
+### 6. TOAST — The Oversized Attribute Storage Technique
+
+Values larger than ~2KB (after compression attempts) are stored in a hidden **TOAST table** (`pg_toast.pg_toast_<oid>`), with a small pointer in the main tuple. This keeps heap pages dense and cache-friendly even when individual rows have large JSONB / TEXT / BYTEA columns.
+
+```sql
+-- See the TOAST table for a given relation
+SELECT reltoastrelid::regclass FROM pg_class WHERE relname = 'articles';
+
+-- Find the largest toasted columns
+SELECT pg_size_pretty(pg_total_relation_size('articles')) AS total,
+       pg_size_pretty(pg_relation_size('articles'))        AS heap,
+       pg_size_pretty(pg_indexes_size('articles'))         AS indexes,
+       pg_size_pretty(pg_total_relation_size('articles')
+                      - pg_relation_size('articles')
+                      - pg_indexes_size('articles'))       AS toast;
+```
+
+Implication: a `SELECT id, title FROM articles` is fast regardless of `body TEXT` size, because the body lives in TOAST and isn't touched unless the query references it. Large columns don't fight for space with hot data.
+
+### 7. The Buffer Pool (`shared_buffers`)
+
+PostgreSQL doesn't read from disk directly on every query — it maintains an in-memory cache of pages called the **buffer pool**, sized by `shared_buffers` (typically 25% of RAM on dedicated servers). Every query first checks whether the pages it needs are already in the pool:
+
+- **Cache hit**: page already in memory → ~100ns access.
+- **Cache miss**: read 8KB from disk → ~100µs on SSD, milliseconds on HDD.
+
+The difference is 1000×–10,000×. This is why "how much data fits in RAM?" is usually a more important question than "how fast is my disk?".
+
+```sql
+-- Cache hit ratio — target 99%+ on OLTP workloads
+SELECT
+  sum(heap_blks_read) AS disk_reads,
+  sum(heap_blks_hit)  AS cache_hits,
+  round(100.0 * sum(heap_blks_hit)
+        / nullif(sum(heap_blks_hit) + sum(heap_blks_read), 0), 2) AS hit_ratio_pct
+FROM pg_statio_user_tables;
+
+-- Same check for indexes
+SELECT indexrelname,
+       idx_blks_read, idx_blks_hit,
+       round(100.0 * idx_blks_hit
+             / nullif(idx_blks_hit + idx_blks_read, 0), 2) AS hit_pct
+FROM pg_statio_user_indexes
+ORDER BY idx_blks_read DESC
+LIMIT 10;
+```
+
+Smaller indexes mean more index pages fit in the buffer pool — which is why BRIN's 10MB index can out-perform a 10GB B-tree when scanning large ranges.
+
+### 8. WAL — The Durability Contract
+
+Before any page change is written back to the data files, PostgreSQL writes the change to the **Write-Ahead Log (WAL)** and fsyncs it. On crash, replaying the WAL brings the data files back to a consistent state. This is what makes `COMMIT` durable.
+
+Consequences you can feel:
+- Every INSERT / UPDATE / DELETE writes **both** a heap change and a WAL record — that's why bulk loads use `COPY` (fewer, larger WAL records).
+- Unlogged tables skip WAL (`CREATE UNLOGGED TABLE ...`) — 2–4× faster writes, but **wiped on crash**. Great for caches and staging.
+- Replication, PITR, and logical decoding all piggy-back on WAL.
+
+---
+
+## 21. Indexes — Theory & Practice
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -2426,7 +2723,142 @@ SELECT * FROM products WHERE name ILIKE '%search%';  -- now uses the GIN index
 
 > **Index choice is determined by your data access patterns, not by the data type.**
 
-An index is a **separate data structure** that maintains a sorted/structured copy of part of your table data, with pointers back to the full rows (heap tuples).
+An index is a **separate data structure** that maintains a sorted/structured copy of part of your table data, with pointers back to the full rows (heap tuples). This chapter builds directly on the storage model from chapter 20 — pages, ctids, the buffer pool, and physical correlation all reappear as the mechanical reasons indexes speed things up (or fail to).
+
+---
+
+### How Indexes Actually Work at the Byte Level
+
+With the storage model in hand, indexes stop being magic. An index is just **another relation made of 8KB pages**, stored alongside the heap, structured so that key lookups are fast.
+
+#### B-tree Structure
+
+A B-tree index is a balanced tree of pages:
+
+```
+                     [ Root Page ]
+                    /      |      \
+          [ Branch ]   [ Branch ]   [ Branch ]
+          /    |    \       …             …
+      [Leaf][Leaf][Leaf]  [Leaf][Leaf][Leaf] …
+        │     │     │
+        └── leaf entries: (indexed_key, ctid) ──┘
+             sorted, linked left→right
+```
+
+- **Root and branch pages** hold separator keys and pointers to child pages.
+- **Leaf pages** hold the actual `(key, ctid)` entries, sorted. Adjacent leaves are doubly linked, so **range scans** and `ORDER BY` reads walk leaves sequentially without revisiting the tree.
+- A lookup walks root → branch → leaf: **O(log n)** page reads. A B-tree of 100M rows typically has depth 4–5 — so 4–5 page reads (mostly from cache) to find any row.
+
+```sql
+-- Inspect an index's page count and depth
+SELECT relname, relpages FROM pg_class WHERE relname = 'idx_orders_user';
+
+-- Requires the pageinspect extension for deeper introspection
+CREATE EXTENSION IF NOT EXISTS pageinspect;
+SELECT * FROM bt_metap('idx_orders_user');   -- tree height, root page, etc.
+```
+
+#### Page Splits & Fill Factor
+
+When a leaf page fills up and a new entry must land there, the page **splits**: half the entries move to a new leaf, parent branch gets a new pointer, and in the worst case the split cascades up. Splits are the #1 source of index bloat and write amplification.
+
+- **Sequential keys (BIGINT IDENTITY, UUID v7, timestamps)** always insert at the right-most leaf → splits are rare, pages fill cleanly, index stays compact.
+- **Random keys (UUID v4)** insert all over the tree → every insert risks splitting a random leaf → index bloats to 1.5–2× its theoretical size, cache hit ratio tanks.
+
+```sql
+-- Leave 10% free on each leaf to absorb future inserts without splitting
+CREATE INDEX idx_events_created ON events(created_at) WITH (fillfactor = 90);
+```
+
+This is the mechanical reason UUID v7 / ULID / BIGINT beat UUID v4 for primary keys on write-heavy tables.
+
+#### Index Scan vs Index-Only Scan vs Bitmap Scan
+
+Same B-tree, three very different execution strategies:
+
+| Scan type | What happens | When it's used |
+|---|---|---|
+| **Index Scan** | Walk index → for each match, fetch heap tuple via ctid | Few rows match; heap columns needed |
+| **Index-Only Scan** | Walk index → return data from the index itself, **no heap fetch** | All needed columns are in the index (INCLUDE) **and** the page is marked all-visible in the visibility map |
+| **Bitmap Index Scan** | Walk index → build bitmap of heap pages → fetch heap pages in **physical order** | Many rows match; random heap I/O would be expensive |
+
+The visibility map is key: PostgreSQL can only skip the heap fetch if it knows **every tuple on that heap page is visible to every transaction**. VACUUM maintains this map — so stale statistics and disabled autovacuum kill index-only scans.
+
+```sql
+-- Verify index-only scan is possible
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT user_id, created_at FROM orders WHERE user_id = 42;
+-- Look for "Index Only Scan" and "Heap Fetches: 0"
+-- If Heap Fetches > 0, the visibility map is stale — run VACUUM
+```
+
+#### What a Write Actually Costs
+
+Every index has a price. A table with 5 indexes turns one logical INSERT into 6 on-disk writes (1 heap + 5 indexes), plus WAL for each:
+
+```
+INSERT INTO orders (id, user_id, status, total, created_at) VALUES (...);
+  ├─ heap: append tuple, update page header, WAL
+  ├─ idx(id):          insert (id, ctid),          possible leaf split
+  ├─ idx(user_id):     insert (user_id, ctid),     possible leaf split
+  ├─ idx(status):      insert (status, ctid),      possible leaf split
+  ├─ idx(total):       insert (total, ctid),       possible leaf split
+  └─ idx(created_at):  insert (created_at, ctid),  sequential — no split
+```
+
+For an UPDATE, HOT saves indexes **only if no indexed column changed**. Otherwise, every index gets a new entry pointing at the new tuple version — and the old entries stay around as dead entries until VACUUM.
+
+This is why **every index has a carrying cost**, and why `pg_stat_user_indexes.idx_scan = 0` after weeks in production is a strong signal to drop it.
+
+```sql
+-- Indexes that have never been used since the last stats reset
+SELECT schemaname, relname AS table_name, indexrelname AS index_name,
+       pg_size_pretty(pg_relation_size(indexrelid)) AS size, idx_scan
+FROM pg_stat_user_indexes
+WHERE idx_scan = 0
+  AND indexrelname NOT LIKE '%_pkey'     -- keep primary keys
+ORDER BY pg_relation_size(indexrelid) DESC;
+```
+
+#### Sequential Scan vs Index Scan — The Crossover
+
+Indexes are not always faster. The planner picks between:
+
+- **Sequential scan**: read the heap file front-to-back, filter in memory. Cheap per page (sequential I/O), but reads every page.
+- **Index scan**: jump through index pages + random heap fetches. Cheap per row, expensive per page touched.
+
+The crossover point is usually around **5–20% of the table**. Beyond that, sequential I/O wins because disks (and the OS readahead) love linear access. This is also why:
+
+- **BRIN** works beautifully on time-series data: physical order matches insert order, so "all rows from last week" maps to a contiguous range of pages and the BRIN index only needs to identify that range.
+- **Full table scans with `parallel workers`** are often preferred for analytical aggregations — the planner correctly chooses seq scan even when an index exists.
+
+```sql
+-- See the planner's reasoning and what scan it picked
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT count(*) FROM orders WHERE created_at > now() - interval '7 days';
+```
+
+#### Bloat in Indexes, and Why REINDEX Exists
+
+Dead tuples in the heap mean **dead index entries** too. Over time, leaf pages fill with entries pointing at ctids that no longer exist. VACUUM removes them, but doesn't re-compact the tree — once split, pages stay split.
+
+```sql
+-- Index bloat check (approximate)
+SELECT schemaname, relname, indexrelname,
+       pg_size_pretty(pg_relation_size(indexrelid)) AS index_size,
+       idx_scan, idx_tup_read, idx_tup_fetch
+FROM pg_stat_user_indexes
+ORDER BY pg_relation_size(indexrelid) DESC
+LIMIT 20;
+
+-- Rebuild without blocking writes (PG 12+)
+REINDEX INDEX CONCURRENTLY idx_orders_user_date;
+```
+
+> **Mental model recap:** data lives in 8KB pages on disk → pages are cached in the buffer pool → MVCC means old versions linger until VACUUM → every index is a separate tree of pages that costs extra writes on every change → the planner picks between sequential and index access based on page counts, not row counts. Keep those five ideas live in your head and most PostgreSQL performance behavior becomes predictable.
+
+---
 
 ### Index Types
 
@@ -2810,7 +3242,7 @@ ORDER BY pg_relation_size(indexrelid) DESC;
 
 ---
 
-## 21. EXPLAIN & Query Analysis
+## 22. EXPLAIN & Query Analysis
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -2881,7 +3313,7 @@ Key fields:
 
 ---
 
-## 22. Joins
+## 23. Joins
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -2962,7 +3394,7 @@ FROM ROWS FROM (
 
 ---
 
-## 23. Subqueries
+## 24. Subqueries
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -3014,7 +3446,7 @@ PostgreSQL can sometimes rewrite subqueries as joins internally. But writing exp
 
 ---
 
-## 24. Lateral Joins
+## 25. Lateral Joins
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -3067,7 +3499,7 @@ LEFT JOIN LATERAL (
 
 ---
 
-## 25. SET Operations & Combining Queries
+## 26. SET Operations & Combining Queries
 
 `UNION`, `INTERSECT`, and `EXCEPT` combine the result sets of two or more `SELECT` statements. They are useful for merging data from structurally similar tables, computing differences between result sets, and implementing certain logic patterns that are awkward to express as joins.
 
@@ -3283,7 +3715,7 @@ SELECT c FROM t3;
 
 ---
 
-## 26. Window Functions
+## 27. Window Functions
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -3382,7 +3814,7 @@ WINDOW w AS (PARTITION BY user_id ORDER BY created_at);
 
 ---
 
-## 27. Grouping Sets, ROLLUP & CUBE
+## 28. Grouping Sets, ROLLUP & CUBE
 
 Standard `GROUP BY` produces one row per unique combination of the grouping columns. `GROUPING SETS`, `ROLLUP`, and `CUBE` are extensions that compute multiple grouping combinations in a single pass over the data — the equivalent of multiple `GROUP BY` queries combined with `UNION ALL`, but far more efficient and expressive.
 
@@ -3556,7 +3988,7 @@ GROUP BY year, ROLLUP(region, category);
 
 ---
 
-## 28. CTEs (Common Table Expressions)
+## 29. CTEs (Common Table Expressions)
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -3836,7 +4268,7 @@ What to check:
 
 ---
 
-## 29. Transactions & Concurrency Control
+## 30. Transactions & Concurrency Control
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -3944,7 +4376,7 @@ SET lock_timeout = '5s';  -- fail if lock not acquired within 5 seconds
 
 ---
 
-## 30. Table Partitioning
+## 31. Table Partitioning
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -4027,7 +4459,7 @@ DROP TABLE events_2024_q1;
 
 ---
 
-## 31. Views & Materialized Views
+## 32. Views & Materialized Views
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -4092,7 +4524,7 @@ REFRESH MATERIALIZED VIEW CONCURRENTLY monthly_revenue;
 
 ---
 
-## 32. Stored Procedures & Functions
+## 33. Stored Procedures & Functions
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -4185,7 +4617,7 @@ CALL batch_process_orders(5000);
 
 ---
 
-## 33. Triggers & Event-Driven Logic
+## 34. Triggers & Event-Driven Logic
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -4278,7 +4710,7 @@ CREATE EVENT TRIGGER ddl_logger ON ddl_command_end EXECUTE FUNCTION log_ddl_even
 
 ---
 
-## 34. Roles, Privileges & Row-Level Security
+## 35. Roles, Privileges & Row-Level Security
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -4350,7 +4782,7 @@ ALTER TABLE orders FORCE ROW LEVEL SECURITY;
 
 ---
 
-## 35. Performance Tuning & Configuration
+## 36. Performance Tuning & Configuration
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -4406,7 +4838,7 @@ LIMIT 10;
 
 ---
 
-## 36. Vacuum, Autovacuum & Bloat Management
+## 37. Vacuum, Autovacuum & Bloat Management
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -4479,7 +4911,7 @@ This is a **critical alert**. The database will shut down to prevent data loss i
 
 ---
 
-## 37. Backup, Recovery & Replication
+## 38. Backup, Recovery & Replication
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -4538,7 +4970,7 @@ CREATE SUBSCRIPTION my_sub
 
 ---
 
-## 38. Extensions
+## 39. Extensions
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -4577,7 +5009,7 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 ---
 
-## 39. pgvector & Semantic Search
+## 40. pgvector & Semantic Search
 
 **pgvector** is a PostgreSQL extension that adds a `vector` data type and distance-based search operators, enabling semantic similarity search directly in the database. Instead of a separate vector database, you can store embeddings alongside your relational data and combine semantic search with SQL filtering, joins, and transactions.
 
@@ -4865,7 +5297,7 @@ SELECT
 
 > This guide was created based on the source **Mastering Postgres** (by Aaron Francis), widely regarded as one of the best PostgreSQL courses.
 
-## 40. Utility Patterns & Recipes
+## 41. Utility Patterns & Recipes
 
 ### 🌍 When You'll Use This in the Real World
 
@@ -5002,7 +5434,7 @@ SELECT pg_size_pretty(pg_database_size('mydb'));
 
 ---
 
-## 41. Quick Reference Cheatsheet
+## 42. Quick Reference Cheatsheet
 
 ### Data Type Decisions
 
@@ -5055,7 +5487,7 @@ SELECT pg_size_pretty(pg_database_size('mydb'));
 
 ---
 
-## 42. Anti-Patterns to Avoid
+## 43. Anti-Patterns to Avoid
 
 ### 🌍 When You'll Encounter These in the Real World
 
