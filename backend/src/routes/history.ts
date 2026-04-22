@@ -98,8 +98,7 @@ router.get('/', async (req: Request, res: Response) => {
 // ─── GET /api/history/:type/:id ───────────────────────────────────────────────
 
 router.get('/:type/:id', async (req: Request, res: Response) => {
-  const userId = req.velarisUser?.userId;
-  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  if (!req.velarisUser?.userId) return res.status(401).json({ error: 'Unauthorized' });
 
   if (!isConnected()) {
     return res.status(503).json({ error: 'History unavailable — database not connected' });
@@ -117,7 +116,8 @@ router.get('/:type/:id', async (req: Request, res: Response) => {
 
   try {
     const model = MODEL_MAP[type as RecordType];
-    const doc = await model.findOne({ _id: id, userId }).lean().exec();
+    // Shared-link read access: any authenticated @velaris.io user can view by record ID.
+    const doc = await model.findById(id).lean().exec();
 
     if (!doc) return res.status(404).json({ error: 'Record not found' });
 
